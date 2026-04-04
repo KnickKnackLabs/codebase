@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Run BATS test suite"
+set -eo pipefail
+
+exec bats "$MISE_CONFIG_ROOT/test/" --recursive
