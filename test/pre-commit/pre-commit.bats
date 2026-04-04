@@ -20,6 +20,9 @@ task_output = "interleave"
 
 [_.codebase]
 lint = ["mise-settings", "gum-table"]
+
+[_.codebase.scope]
+gum-table = ".mise/tasks"
 EOF
 }
 
@@ -55,6 +58,14 @@ run_uninstall() {
   run_install
   grep -q "mise-settings" "$REPO/.git/hooks/pre-commit.d/codebase"
   grep -q "gum-table" "$REPO/.git/hooks/pre-commit.d/codebase"
+}
+
+@test "install: hook contains scope mappings" {
+  run_install
+  # gum-table should have .mise/tasks scope (from config)
+  grep -q '.mise/tasks' "$REPO/.git/hooks/pre-commit.d/codebase"
+  # mise-settings should have . scope (default)
+  grep -q 'mise-settings' "$REPO/.git/hooks/pre-commit.d/codebase"
 }
 
 @test "install: dispatcher is executable" {
@@ -145,6 +156,35 @@ EOF
   run bash -c "usage_target='$REPO' bash '$INSTALL'"
   [ "$status" -ne 0 ]
   [[ "$output" == *"no lint rules"* ]]
+}
+
+@test "install: uses default scope when no override" {
+  # Remove scope section
+  cat > "$REPO/mise.toml" <<'EOF'
+[settings]
+quiet = true
+
+[_.codebase]
+lint = ["gum-table"]
+EOF
+  run_install
+  # gum-table should use default scope .mise/tasks
+  grep -q '.mise/tasks' "$REPO/.git/hooks/pre-commit.d/codebase"
+}
+
+@test "install: scope override takes precedence over default" {
+  cat > "$REPO/mise.toml" <<'EOF'
+[settings]
+quiet = true
+
+[_.codebase]
+lint = ["gum-table"]
+
+[_.codebase.scope]
+gum-table = "src/scripts"
+EOF
+  run_install
+  grep -q 'src/scripts' "$REPO/.git/hooks/pre-commit.d/codebase"
 }
 
 # ============================================================================

@@ -22,27 +22,53 @@ find_bash_tasks() {
   done
 }
 
-# Classify a printf-padding hit by checking if it's inside a loop.
-# Reads the file up to the given line number, looking for enclosing
-# while/for that hasn't been closed by done.
-is_inside_loop() {
+# Scan a single file. Single-pass: track loop depth as we go,
+# classify hits inline. No subprocess per line.
+scan_file() {
   local file="$1"
-  local target_line="$2"
-  local depth=0
-  local n=0
+  local -n _hits=$2
+  local loop_depth=0
+  local lineno=0
+
   while IFS= read -r line; do
-    n=$((n + 1))
-    [ "$n" -ge "$target_line" ] && break
-    # Count loop openers (while/for at start of line or after ; / &&/ ||)
-    if echo "$line" | grep -qE '(^|;|&&|\|\||\|)[[:space:]]*(while|for)\b'; then
-      depth=$((depth + 1))
+    lineno=$((lineno + 1))
+
+    # Track loop depth (while/for ... done)
+    if [[ "$line" =~ (^|[\;\&\|])[[:space:]]*(while|for)[[:space:]] ]]; then
+      loop_depth=$((loop_depth + 1))
     fi
-    # Count loop closers
-    if echo "$line" | grep -qE '(^|;)[[:space:]]*done\b'; then
-      depth=$((depth - 1))
+    if [[ "$line" =~ (^|[\;])[[:space:]]*done([[:space:]]|$) ]]; then
+      loop_depth=$((loop_depth - 1))
     fi
+
+    # Skip comment lines
+    [[ "$line" =~ ^[[:space:]]*\# ]] && continue
+
+    # Skip inline ignore
+    [[ "$line" == *"codebase:ignore"* ]] && continue
+
+    # Skip error strings
+    [[ "$line" == *'${'*':?'*'%-'* ]] && continue
+
+    # Skip echo'd usage instructions
+    [[ "$line" =~ ^[[:space:]]*(echo|Echo)[[:space:]].*%-[0-9]+ ]] && continue
+
+    # Pattern: column -t
+    if [[ "$line" == *'| column -t'* ]] || [[ "$line" == *'|column -t'* ]]; then
+      _hits+=("[column-t] $lineno: $line")
+      continue
+    fi
+
+    # Pattern: printf with %-Ns
+    if [[ "$line" == *'printf'*'%-'*'s'* ]]; then
+      if [[ $loop_depth -gt 0 ]]; then
+        _hits+=("[loop-table] $lineno: $line")
+      else
+        _hits+=("[padding] $lineno: $line")
+      fi
+    fi
+
   done < "$file"
-  [ "$depth" -gt 0 ]
 }
 
 failures=0
@@ -57,40 +83,7 @@ for target in "${TARGETS[@]}"; do
     rel="${file#"$target"/}"
     hits=()
 
-    lineno=0
-    while IFS= read -r line; do
-      lineno=$((lineno + 1))
-
-      # Skip comment lines
-      [[ "$line" =~ ^[[:space:]]*# ]] && continue
-
-      # Skip lines with inline ignore marker
-      [[ "$line" == *"codebase:ignore"* ]] && continue
-
-      # Skip lines where the pattern is inside a :? error string
-      echo "$line" | grep -qE '\$\{[^}]*:\?.*%-[0-9]' && continue
-
-      # Skip echo/printf lines that are displaying usage instructions
-      if echo "$line" | grep -qE '^[[:space:]]*(echo|Echo) ".*%-[0-9]+'; then
-        continue
-      fi
-
-      # Pattern: piping to column -t (always high confidence)
-      if echo "$line" | grep -qE '\|\s*column\s+-t'; then
-        hits+=("[column-t] $lineno: $line")
-        continue
-      fi
-
-      # Pattern: printf with fixed-width padding (%-Ns)
-      if echo "$line" | grep -qE 'printf.*%-[0-9]+s'; then
-        if is_inside_loop "$file" "$lineno"; then
-          hits+=("[loop-table] $lineno: $line")
-        else
-          hits+=("[padding] $lineno: $line")
-        fi
-      fi
-
-    done < "$file"
+    scan_file "$file" hits
 
     if [[ ${#hits[@]} -gt 0 ]]; then
       # Check if file already uses gum table (suppress if so)

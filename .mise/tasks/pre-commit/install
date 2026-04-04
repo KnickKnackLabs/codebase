@@ -18,8 +18,6 @@ if [[ ! -f "$TOML" ]]; then
 fi
 
 # Read lint rules from [_.codebase].lint
-# Expects: [_.codebase]
-#          lint = ["mise-settings", "gum-table"]
 RULES=$(awk '
   /^\[_\.codebase\]/ { in_section=1; next }
   /^\[/ { in_section=0 }
@@ -41,7 +39,42 @@ if [[ -z "$RULES" ]]; then
   exit 1
 fi
 
-echo "Rules: $RULES"
+# Read per-rule scope overrides from [_.codebase.scope]
+# e.g. gum-table = ".mise/tasks"
+declare -A SCOPES
+while IFS='=' read -r rule scope; do
+  [[ -z "$rule" ]] && continue
+  rule=$(echo "$rule" | tr -d ' "')
+  scope=$(echo "$scope" | tr -d ' "')
+  SCOPES["$rule"]="$scope"
+done < <(awk '
+  /^\[_\.codebase\.scope\]/ { in_section=1; next }
+  /^\[/ { in_section=0 }
+  in_section && /=/ { print }
+' "$TOML")
+
+# Default scopes per rule
+declare -A DEFAULT_SCOPES
+DEFAULT_SCOPES[mise-settings]="."
+DEFAULT_SCOPES[gum-table]=".mise/tasks"
+
+# Resolve scope: explicit > default > "."
+resolve_scope() {
+  local rule="$1"
+  if [[ -n "${SCOPES[$rule]:-}" ]]; then
+    echo "${SCOPES[$rule]}"
+  elif [[ -n "${DEFAULT_SCOPES[$rule]:-}" ]]; then
+    echo "${DEFAULT_SCOPES[$rule]}"
+  else
+    echo "."
+  fi
+}
+
+echo "Rules:"
+for rule in $RULES; do
+  scope=$(resolve_scope "$rule")
+  echo "  $rule → $scope"
+done
 
 # --- Install dispatcher if missing ---
 HOOK="$TARGET/.git/hooks/pre-commit"
@@ -70,6 +103,13 @@ else
   mkdir -p "$HOOK_DIR"
 fi
 
+# --- Build scope map for the hook ---
+SCOPE_ENTRIES=""
+for rule in $RULES; do
+  scope=$(resolve_scope "$rule")
+  SCOPE_ENTRIES+="SCOPES[\"$rule\"]=\"$scope\""$'\n'
+done
+
 # --- Write codebase hook ---
 CODEBASE_HOOK="$HOOK_DIR/codebase"
 cat > "$CODEBASE_HOOK" <<HOOK
@@ -81,10 +121,24 @@ set -eo pipefail
 REPO_ROOT="\$(git rev-parse --show-toplevel)"
 
 RULES=($RULES)
+
+declare -A SCOPES
+$SCOPE_ENTRIES
+
 failures=0
 
 for rule in "\${RULES[@]}"; do
-  if ! codebase lint:"\$rule" "\$REPO_ROOT" 2>&1; then
+  scope="\${SCOPES[\$rule]:-.}"
+  target="\$REPO_ROOT/\$scope"
+
+  # Normalize: if scope is ".", just use REPO_ROOT
+  [[ "\$scope" == "." ]] && target="\$REPO_ROOT"
+
+  output=\$(codebase lint:"\$rule" "\$target" 2>&1)
+  status=\$?
+  if [ "\$status" -ne 0 ]; then
+    # Only show WARN/FAIL/ERROR lines, not INFO
+    echo "\$output" | grep -E '^(WARN|FAIL|ERROR)' >&2
     failures=\$((failures + 1))
   fi
 done
@@ -98,4 +152,3 @@ HOOK
 chmod +x "$CODEBASE_HOOK"
 
 echo "Installed codebase hook → .git/hooks/pre-commit.d/codebase"
-echo "Rules: ${RULES}"
