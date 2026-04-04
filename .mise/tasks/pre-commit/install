@@ -134,11 +134,10 @@ for rule in "\${RULES[@]}"; do
   # Normalize: if scope is ".", just use REPO_ROOT
   [[ "\$scope" == "." ]] && target="\$REPO_ROOT"
 
-  output=\$(codebase lint:"\$rule" "\$target" 2>&1)
-  status=\$?
-  if [ "\$status" -ne 0 ]; then
-    # Only show WARN/FAIL/ERROR lines, not INFO
-    echo "\$output" | grep -E '^(WARN|FAIL|ERROR)' >&2
+  output=\$(codebase lint:"\$rule" "\$target" 2>&1) || status=\$?
+  if [ "\${status:-0}" -ne 0 ]; then
+    echo "codebase: lint:\$rule failed" >&2
+    echo "\$output" | grep -v '^INFO' | grep -v '^OK' | grep -v '\[lint:' >&2 || true
     failures=\$((failures + 1))
   fi
 done
