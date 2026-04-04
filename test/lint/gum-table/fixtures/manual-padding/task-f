@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Printf padding inside a piped while loop"
+set -euo pipefail
+
+echo "$DATA" | while read -r name status; do
+  printf "%-20s  %s\n" "$name" "$status"
+done

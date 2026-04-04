@@ -22,6 +22,29 @@ find_bash_tasks() {
   done
 }
 
+# Classify a printf-padding hit by checking if it's inside a loop.
+# Reads the file up to the given line number, looking for enclosing
+# while/for that hasn't been closed by done.
+is_inside_loop() {
+  local file="$1"
+  local target_line="$2"
+  local depth=0
+  local n=0
+  while IFS= read -r line; do
+    n=$((n + 1))
+    [ "$n" -ge "$target_line" ] && break
+    # Count loop openers (while/for at start of line or after ; / &&/ ||)
+    if echo "$line" | grep -qE '(^|;|&&|\|\||\|)[[:space:]]*(while|for)\b'; then
+      depth=$((depth + 1))
+    fi
+    # Count loop closers
+    if echo "$line" | grep -qE '(^|;)[[:space:]]*done\b'; then
+      depth=$((depth - 1))
+    fi
+  done < "$file"
+  [ "$depth" -gt 0 ]
+}
+
 failures=0
 
 for target in "${TARGETS[@]}"; do
@@ -34,7 +57,6 @@ for target in "${TARGETS[@]}"; do
     rel="${file#"$target"/}"
     hits=()
 
-    # Read file, skip comments and strings in non-executable contexts
     lineno=0
     while IFS= read -r line; do
       lineno=$((lineno + 1))
@@ -45,20 +67,24 @@ for target in "${TARGETS[@]}"; do
       # Skip lines where the pattern is inside a :? error string
       echo "$line" | grep -qE '\$\{[^}]*:\?.*%-[0-9]' && continue
 
-      # Skip echo/printf lines that are displaying usage instructions (not live code)
-      # Heuristic: echo/printf of a literal string containing %-
+      # Skip echo/printf lines that are displaying usage instructions
       if echo "$line" | grep -qE '^[[:space:]]*(echo|Echo) ".*%-[0-9]+'; then
         continue
       fi
 
-      # Pattern 1: printf with fixed-width padding (%-Ns)
-      if echo "$line" | grep -qE 'printf.*%-[0-9]+s'; then
-        hits+=("$lineno: $line")
+      # Pattern: piping to column -t (always high confidence)
+      if echo "$line" | grep -qE '\|\s*column\s+-t'; then
+        hits+=("[column-t] $lineno: $line")
+        continue
       fi
 
-      # Pattern 2: piping to column -t
-      if echo "$line" | grep -qE '\|\s*column\s+-t'; then
-        hits+=("$lineno: $line")
+      # Pattern: printf with fixed-width padding (%-Ns)
+      if echo "$line" | grep -qE 'printf.*%-[0-9]+s'; then
+        if is_inside_loop "$file" "$lineno"; then
+          hits+=("[loop-table] $lineno: $line")
+        else
+          hits+=("[padding] $lineno: $line")
+        fi
       fi
 
     done < "$file"
@@ -70,10 +96,18 @@ for target in "${TARGETS[@]}"; do
       fi
 
       name=$(basename "$target")
+      has_high_confidence=false
       for hit in "${hits[@]}"; do
-        echo "WARN  $name:$rel:$hit"
+        if [[ "$hit" == "[column-t]"* ]] || [[ "$hit" == "[loop-table]"* ]]; then
+          echo "WARN  $name:$rel:$hit"
+          has_high_confidence=true
+        else
+          echo "INFO  $name:$rel:$hit"
+        fi
       done
-      failures=$((failures + 1))
+      if $has_high_confidence; then
+        failures=$((failures + 1))
+      fi
     fi
   done < <(find_bash_tasks "$target")
 done

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#MISE description="Printf padding inside a loop — classic table"
+set -euo pipefail
+
+printf "%-20s  %-10s\n" "NAME" "STATUS"
+while read -r name status; do
+  printf "%-20s  %-10s\n" "$name" "$status"
+done < "$INPUT"

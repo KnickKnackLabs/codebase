@@ -12,53 +12,69 @@ run_lint() {
 }
 
 # ============================================================================
-# True positives — should detect
+# High confidence: column -t (always a true positive)
 # ============================================================================
 
-@test "detects printf with fixed-width padding (%-20s)" {
-  run run_lint "$FIXTURES/manual-padding/task-a"
-  [ "$status" -ne 0 ]
-  [[ "$output" == *"%-20s"* ]]
-}
-
-@test "detects padded printf in a loop" {
-  run run_lint "$FIXTURES/manual-padding/task-b"
-  [ "$status" -ne 0 ]
-  [[ "$output" == *"%-30s"* ]]
-}
-
-@test "detects column -t usage" {
+@test "column-t: detects piping to column -t" {
   run run_lint "$FIXTURES/manual-padding/task-c"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"column -t"* ]]
-}
-
-@test "detects separator lines with manual padding" {
-  run run_lint "$FIXTURES/manual-padding/task-d"
-  [ "$status" -ne 0 ]
-  [[ "$output" == *"%-20s"* ]]
-}
-
-@test "reports all hits in a file with multiple patterns" {
-  run run_lint "$FIXTURES/manual-padding/task-a"
-  [ "$status" -ne 0 ]
-  # task-a has two printf lines with %-20s
-  count=$(echo "$output" | grep -c "WARN")
-  [ "$count" -eq 2 ]
-}
-
-@test "detects across entire directory" {
-  run run_lint "$FIXTURES/manual-padding"
-  [ "$status" -ne 0 ]
-  # All four fixture files should produce warnings
-  [[ "$output" == *"task-a"* ]]
-  [[ "$output" == *"task-b"* ]]
-  [[ "$output" == *"task-c"* ]]
-  [[ "$output" == *"task-d"* ]]
+  [[ "$output" == *"[column-t]"* ]]
+  [[ "$output" == *"WARN"* ]]
 }
 
 # ============================================================================
-# True negatives — should NOT detect
+# High confidence: printf padding inside a loop
+# ============================================================================
+
+@test "loop-table: detects printf %-Ns inside while-read" {
+  run run_lint "$FIXTURES/manual-padding/task-b"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"[loop-table]"* ]]
+  [[ "$output" == *"WARN"* ]]
+}
+
+@test "loop-table: detects printf in piped while loop" {
+  run run_lint "$FIXTURES/manual-padding/task-f"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"[loop-table]"* ]]
+}
+
+@test "loop-table: detects printf in loop, header outside is INFO" {
+  run run_lint "$FIXTURES/manual-padding/task-e"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"[loop-table]"* ]]
+  [[ "$output" == *"[padding]"* ]]
+  # The loop hit is WARN, the header is INFO
+  echo "$output" | grep "loop-table" | grep -q "WARN"
+  echo "$output" | grep "padding" | grep -q "INFO"
+}
+
+# ============================================================================
+# Low confidence: printf padding outside loops (INFO only, not a failure)
+# ============================================================================
+
+@test "padding: printf %-Ns outside loop is INFO, not a failure" {
+  run run_lint "$FIXTURES/manual-padding/task-a"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[padding]"* ]]
+  [[ "$output" == *"INFO"* ]]
+  # Should NOT have WARN
+  [[ "$output" != *"WARN"* ]]
+}
+
+@test "padding: status display with label alignment is INFO only" {
+  run run_lint "$FIXTURES/clean/task-status"
+  [ "$status" -eq 0 ]
+}
+
+@test "padding: separator + header without loop is INFO only" {
+  run run_lint "$FIXTURES/manual-padding/task-d"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"INFO"* ]]
+}
+
+# ============================================================================
+# True negatives — no output at all
 # ============================================================================
 
 @test "clean: already using gum table" {
@@ -85,21 +101,37 @@ run_lint() {
   [[ "$output" == *"OK"* ]]
 }
 
-@test "clean: entire clean directory passes" {
+# ============================================================================
+# Multi-file scanning
+# ============================================================================
+
+@test "directory scan finds high-confidence hits" {
+  run run_lint "$FIXTURES/manual-padding"
+  [ "$status" -ne 0 ]
+  # task-b (loop), task-c (column-t), task-e (loop) should WARN
+  [[ "$output" == *"task-b"* ]]
+  [[ "$output" == *"task-c"* ]]
+  [[ "$output" == *"task-e"* ]]
+}
+
+@test "clean directory passes entirely" {
   run run_lint "$FIXTURES/clean"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"OK"* ]]
 }
 
 # ============================================================================
 # Output format
 # ============================================================================
 
-@test "output includes file path and line number" {
-  run run_lint "$FIXTURES/manual-padding/task-a"
+@test "WARN output includes file path, category, and line number" {
+  run run_lint "$FIXTURES/manual-padding/task-b"
   [ "$status" -ne 0 ]
-  # Format: WARN  name:rel:lineno: line
-  [[ "$output" =~ WARN.*task-a:[0-9]+: ]]
+  [[ "$output" =~ WARN.*task-b:\[loop-table\].*[0-9]+: ]]
+}
+
+@test "INFO output includes file path, category, and line number" {
+  run run_lint "$FIXTURES/manual-padding/task-a"
+  [[ "$output" =~ INFO.*task-a:\[padding\].*[0-9]+: ]]
 }
 
 # ============================================================================

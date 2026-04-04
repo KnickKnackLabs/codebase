@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#MISE description="Status display with label alignment — not a table"
+set -euo pipefail
+
+# Fixed status lines with padding for visual alignment
+# This is a dashboard/checklist, not dynamic tabular data
+print_status() {
+  local label="$1"
+  local check="$2"
+  local status="$3"
+  printf "  %-10s %s %s\n" "$label" "$check" "$status"
+}
+
+print_status "Identity" "✓" "baby-joel@ricon.family"
+print_status "GPG" "✓" "signing enabled"
+print_status "Email" "✓" "308 unread"
