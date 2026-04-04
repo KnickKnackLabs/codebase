@@ -41,6 +41,12 @@ setup() {
   [[ "$output" == *"no mise.toml"* ]]
 }
 
+@test "lint: skips when codebase:ignore mise-settings is set" {
+  run bash -c "usage_targets='$FIXTURES/ignored' bash '$LINT'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"SKIP"* ]]
+}
+
 @test "lint: checks multiple targets" {
   run bash -c "usage_targets='$FIXTURES/complete $FIXTURES/missing-both' bash '$LINT'"
   [ "$status" -ne 0 ]

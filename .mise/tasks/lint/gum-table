@@ -64,6 +64,9 @@ for target in "${TARGETS[@]}"; do
       # Skip comment lines
       [[ "$line" =~ ^[[:space:]]*# ]] && continue
 
+      # Skip lines with inline ignore marker
+      [[ "$line" == *"codebase:ignore"* ]] && continue
+
       # Skip lines where the pattern is inside a :? error string
       echo "$line" | grep -qE '\$\{[^}]*:\?.*%-[0-9]' && continue
 

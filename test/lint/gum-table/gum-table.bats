@@ -95,6 +95,12 @@ run_lint() {
   [[ "$output" == *"OK"* ]]
 }
 
+@test "clean: inline codebase:ignore suppresses hit" {
+  run run_lint "$FIXTURES/clean/task-ignored"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK"* ]]
+}
+
 @test "clean: padding pattern in a usage/help string" {
   run run_lint "$FIXTURES/clean/task-string"
   [ "$status" -eq 0 ]

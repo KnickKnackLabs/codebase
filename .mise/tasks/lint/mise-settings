@@ -37,6 +37,12 @@ for target in "${TARGETS[@]}"; do
 
   missing=()
 
+  # Check for file-level ignore
+  if head -20 "$toml" | grep -q 'codebase:ignore mise-settings'; then
+    echo "SKIP  $name (codebase:ignore)"
+    continue
+  fi
+
   if ! grep -q "^quiet = true" "$toml"; then
     missing+=("$REQUIRED_QUIET")
   fi

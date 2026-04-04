@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Has padding but with inline ignore"
+set -euo pipefail
+
+printf "%-20s  %s\n" "$name" "$status"  # codebase:ignore
