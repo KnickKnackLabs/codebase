@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+#MISE description="Check that mise.toml has required settings"
+#USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+#USAGE flag "--fix" help="Add missing settings to mise.toml"
+
+set -euo pipefail
+
+FIX="${usage_fix:-false}"
+
+# Required settings
+REQUIRED_QUIET="quiet = true"
+REQUIRED_OUTPUT='task_output = "interleave"'
+
+IFS=' ' read -ra TARGETS <<< "${usage_targets}"
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+  echo "ERROR: at least one target is required" >&2
+  exit 1
+fi
+
+failures=0
+
+for target in "${TARGETS[@]}"; do
+  if [[ ! -e "$target" ]]; then
+    echo "ERROR: target does not exist: $target" >&2
+    exit 1
+  fi
+
+  toml="$target/mise.toml"
+  name=$(basename "$target")
+
+  if [[ ! -f "$toml" ]]; then
+    echo "FAIL  $name: no mise.toml found"
+    failures=$((failures + 1))
+    continue
+  fi
+
+  missing=()
+
+  if ! grep -q "^quiet = true" "$toml"; then
+    missing+=("$REQUIRED_QUIET")
+  fi
+
+  if ! grep -q '^task_output = "interleave"' "$toml"; then
+    missing+=("$REQUIRED_OUTPUT")
+  fi
+
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    echo "OK    $name"
+    continue
+  fi
+
+  if [[ "$FIX" == "true" ]]; then
+    # Ensure [settings] section exists, append missing keys
+    if ! grep -q '^\[settings\]' "$toml"; then
+      printf '\n[settings]\n' >> "$toml"
+    fi
+
+    for setting in "${missing[@]}"; do
+      if ! grep -q "^${setting%%=*}=" "$toml"; then
+        # Insert after [settings] line
+        sed -i '' "/^\[settings\]/a\\
+$setting
+" "$toml"
+      fi
+    done
+
+    echo "FIXED $name: added ${missing[*]}"
+  else
+    echo "FAIL  $name: missing ${missing[*]}"
+    failures=$((failures + 1))
+  fi
+done
+
+exit "$failures"

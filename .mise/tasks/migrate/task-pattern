@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-#MISE description="Migrate mise run calls to _task pattern"
+#MISE description="Migrate mise run calls to _task pattern (or reverse)"
 #USAGE arg "<target>" help="Path to the codebase to migrate"
+#USAGE flag "--reverse" help="Reverse: _task back to mise run"
 
 set -euo pipefail
 
 TARGET="${usage_target}"
+REVERSE="${usage_reverse:-false}"
 
 if [[ ! -e "$TARGET" ]]; then
   echo "ERROR: target does not exist: $TARGET" >&2
@@ -26,20 +28,13 @@ find_bash_tasks() {
   done
 }
 
-# Migrate a single file in-place
+# Migrate a single file in-place (forward or reverse)
 migrate_file() {
   local file="$1"
-
-  # Replace `mise run -q <task>` with `_task <task>` (strip -q)
-  # Replace `mise run <task>` with `_task <task>`
-  #
-  # Only match lines where mise run is an actual command invocation,
-  # not inside strings (echo, printf) or comments.
-  #
-  # Strategy: process line by line, only transform lines where
-  # `mise run` appears as a command (not inside quotes or after echo/printf).
-
   local tmp="${file}.migrate.tmp"
+
+  # Strategy: process line by line, only transform lines where
+  # the pattern appears as a command (not inside quotes or after echo/printf).
 
   while IFS= read -r line; do
     # Skip comment lines
@@ -48,33 +43,48 @@ migrate_file() {
       continue
     fi
 
-    # Skip lines where mise run is in a non-executable context:
-    # 1. ${var:?error message} bash error strings
-    if echo "$line" | grep -qE '\$\{[^}]*:\?.*mise run'; then
-      echo "$line"
-      continue
-    fi
-    # 2. echo/printf lines where mise run is NOT inside a live $() substitution
-    #    Heuristic: if the line starts with echo/printf AND contains \$( (escaped),
-    #    or mise run appears without a preceding unescaped $(, it's a string.
-    if echo "$line" | grep -qE '(echo|printf)[[:space:]]'; then
-      # Check if mise run appears after an unescaped $( — that's a live substitution
-      if echo "$line" | grep -qE '[^\\]\$\(.*mise run' && \
-         ! echo "$line" | grep -qE '\\\$\(.*mise run'; then
-        # Live $() inside echo — migrate the mise run calls
-        :  # fall through to replacement
-      else
+    if [[ "$REVERSE" == "true" ]]; then
+      # --- Reverse: _task → mise run ---
+
+      # Skip lines where _task appears in non-executable context
+      if echo "$line" | grep -qE '(echo|printf)[[:space:]]'; then
+        if echo "$line" | grep -qE '[^\\]\$\(.*_task' && \
+           ! echo "$line" | grep -qE '\\\$\(.*_task'; then
+          :  # live $() — fall through
+        else
+          echo "$line"
+          continue
+        fi
+      fi
+
+      # Replace _task <name> → mise run <name>
+      line=$(echo "$line" | sed -E 's/_task ([a-zA-Z_][a-zA-Z0-9_:.-]*)/mise run \1/g')
+    else
+      # --- Forward: mise run → _task ---
+
+      # Skip lines where mise run is in a non-executable context:
+      # 1. ${var:?error message} bash error strings
+      if echo "$line" | grep -qE '\$\{[^}]*:\?.*mise run'; then
         echo "$line"
         continue
       fi
+      # 2. echo/printf lines where mise run is NOT inside a live $() substitution
+      if echo "$line" | grep -qE '(echo|printf)[[:space:]]'; then
+        if echo "$line" | grep -qE '[^\\]\$\(.*mise run' && \
+           ! echo "$line" | grep -qE '\\\$\(.*mise run'; then
+          :  # live $() — fall through
+        else
+          echo "$line"
+          continue
+        fi
+      fi
+
+      # Replace mise run -q <task> → _task <task>
+      line=$(echo "$line" | sed -E 's/mise run -q ([^ )]+)/_task \1/g')
+
+      # Replace mise run <task> → _task <task>
+      line=$(echo "$line" | sed -E 's/mise run ([a-zA-Z_][a-zA-Z0-9_:.-]*)/_task \1/g')
     fi
-
-    # Replace mise run -q <task> → _task <task>
-    line=$(echo "$line" | sed -E 's/mise run -q ([^ )]+)/_task \1/g')
-
-    # Replace mise run <task> → _task <task>
-    # Only match task names (word:word pattern or plain word, not flags starting with -)
-    line=$(echo "$line" | sed -E 's/mise run ([a-zA-Z_][a-zA-Z0-9_:.-]*)/_task \1/g')
 
     echo "$line"
   done < "$file" > "$tmp"

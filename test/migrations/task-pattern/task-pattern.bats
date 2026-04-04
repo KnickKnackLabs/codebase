@@ -11,15 +11,26 @@ setup() {
   cp -r "$FIXTURES/before" "$WORK_DIR"
 }
 
-# Helper: run migration on work dir
+# Helper: run forward migration on work dir
 run_migrate() {
   usage_target="$WORK_DIR" bash "$MIGRATE"
+}
+
+# Helper: run reverse migration on work dir
+run_migrate_reverse() {
+  usage_target="$WORK_DIR" usage_reverse=true bash "$MIGRATE"
 }
 
 # Helper: compare a migrated file against its expected after
 assert_matches_after() {
   local file="$1"
   diff -u "$FIXTURES/after/$file" "$WORK_DIR/$file"
+}
+
+# Helper: compare a migrated file against the before fixture
+assert_matches_before() {
+  local file="$1"
+  diff -u "$FIXTURES/before/$file" "$WORK_DIR/$file"
 }
 
 # ============================================================================
@@ -65,6 +76,52 @@ assert_matches_after() {
   # Diff entire directory trees
   run diff -ru "$FIXTURES/after" "$WORK_DIR"
   [ "$status" -eq 0 ]
+}
+
+# ============================================================================
+# Reverse migration tests
+# ============================================================================
+
+@test "reverse: _task → mise run" {
+  # Start from the after state
+  rm -rf "$WORK_DIR"
+  cp -r "$FIXTURES/after" "$WORK_DIR"
+  run_migrate_reverse
+  # simple and with-args are lossless round-trips
+  assert_matches_before ".mise/tasks/simple"
+  assert_matches_before ".mise/tasks/with-args"
+}
+
+@test "reverse: does not change comments or echo strings" {
+  rm -rf "$WORK_DIR"
+  cp -r "$FIXTURES/after" "$WORK_DIR"
+  run_migrate_reverse
+  assert_matches_before ".mise/tasks/error-strings"
+}
+
+@test "reverse: handles _task inside command substitution" {
+  rm -rf "$WORK_DIR"
+  cp -r "$FIXTURES/after" "$WORK_DIR"
+  run_migrate_reverse
+  # in-subshell had mise run -q, reverse produces mise run (no -q)
+  # so we check the specific expected output
+  grep -q 'mise run email:quota' "$WORK_DIR/.mise/tasks/in-subshell"
+  grep -q 'mise run email:list' "$WORK_DIR/.mise/tasks/in-subshell"
+  # Should NOT contain _task anymore
+  ! grep -q '_task' "$WORK_DIR/.mise/tasks/in-subshell"
+}
+
+# ============================================================================
+# Round-trip tests
+# ============================================================================
+
+@test "round-trip: forward then reverse restores lossless fixtures" {
+  # Only test fixtures where forward is lossless (no -q flag)
+  run_migrate
+  run_migrate_reverse
+  assert_matches_before ".mise/tasks/simple"
+  assert_matches_before ".mise/tasks/with-args"
+  assert_matches_before ".mise/tasks/error-strings"
 }
 
 # ============================================================================
