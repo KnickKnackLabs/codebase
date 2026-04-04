@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+#MISE description="Scan a codebase for AST pattern matches"
+#USAGE arg "<target>" help="Path to the codebase to scan"
+#USAGE flag "-p --pattern <pattern>" required=#true help="ast-grep pattern to search for"
+#USAGE flag "-l --lang <lang>" help="Language (default: bash)"
+
+set -euo pipefail
+
+TARGET="${usage_target}"
+PATTERN="${usage_pattern}"
+LANG="${usage_lang:-bash}"
+
+if [[ -z "$PATTERN" ]]; then
+  echo "ERROR: --pattern is required" >&2
+  exit 1
+fi
+
+if [[ ! -e "$TARGET" ]]; then
+  echo "ERROR: target does not exist: $TARGET" >&2
+  exit 1
+fi
+
+# ast-grep requires file extensions to detect language.
+# Mise task files have no extension, so we create a temp directory
+# with symlinks that have the appropriate extension.
+WORK_DIR=$(mktemp -d)
+trap 'rm -rf "$WORK_DIR"' EXIT
+
+# Find files that look like bash scripts (shebang or extension)
+find_bash_files() {
+  local target="$1"
+
+  # Files with .sh/.bash extension
+  find "$target" -type f \( -name "*.sh" -o -name "*.bash" \) 2>/dev/null
+
+  # Extension-less files with bash shebang
+  find "$target" -type f ! -name "*.*" 2>/dev/null | while read -r f; do
+    if head -1 "$f" 2>/dev/null | grep -q '#!/usr/bin/env bash\|#!/bin/bash'; then
+      echo "$f"
+    fi
+  done
+}
+
+# Create symlinks with .sh extension in a mirrored directory structure
+link_count=0
+while IFS= read -r src; do
+  # Compute relative path from target
+  rel="${src#"$TARGET"/}"
+  dest="$WORK_DIR/$rel.sh"
+  mkdir -p "$(dirname "$dest")"
+  cp "$src" "$dest"
+  link_count=$((link_count + 1))
+done < <(find_bash_files "$TARGET")
+
+if [[ "$link_count" -eq 0 ]]; then
+  exit 0
+fi
+
+# Run ast-grep on the symlinked tree
+raw_output=$(sg run --pattern "$PATTERN" -l "$LANG" --no-ignore hidden "$WORK_DIR" 2>/dev/null || true)
+
+if [[ -z "$raw_output" ]]; then
+  exit 0
+fi
+
+# Rewrite paths back to original (strip work dir prefix and .sh suffix)
+echo "$raw_output" | sed "s|$WORK_DIR/||g" | sed 's|\.sh:|:|g; s|\.sh$||g'

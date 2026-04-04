@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Run tests"
+#USAGE flag "--verbose" help="Verbose output"
+set -euo pipefail
+
+mise run util:clean
+bats test/ --recursive

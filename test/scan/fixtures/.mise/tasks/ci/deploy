@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Deploy the project"
+set -euo pipefail
+
+echo "Deploying..."
+_task ci:build
+echo "Done"
