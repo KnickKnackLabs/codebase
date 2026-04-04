@@ -1,19 +1,15 @@
 #!/usr/bin/env bats
-# Tests for codebase pre-commit install/uninstall
+# Tests for codebase pre-commit
 
 setup() {
   CODEBASE_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
-  INSTALL="$CODEBASE_DIR/.mise/tasks/pre-commit/install"
-  UNINSTALL="$CODEBASE_DIR/.mise/tasks/pre-commit/uninstall"
+  TASK="$CODEBASE_DIR/.mise/tasks/pre-commit"
 
   # Create a fresh git repo with mise.toml for each test
   REPO="$BATS_TEST_TMPDIR/repo"
   mkdir -p "$REPO"
   git -C "$REPO" init -q
   cat > "$REPO/mise.toml" <<'EOF'
-[tools]
-bats = "1.13.0"
-
 [settings]
 quiet = true
 task_output = "interleave"
@@ -26,63 +22,61 @@ gum-table = ".mise/tasks"
 EOF
 }
 
-run_install() {
-  usage_target="$REPO" bash "$INSTALL"
-}
-
-run_uninstall() {
-  usage_target="$REPO" bash "$UNINSTALL"
+run_pre_commit() {
+  local revert="false" check="false"
+  for arg in "$@"; do
+    case "$arg" in
+      --revert) revert="true" ;;
+      --check) check="true" ;;
+    esac
+  done
+  cd "$REPO" && usage_revert="$revert" usage_check="$check" bash "$TASK"
 }
 
 # ============================================================================
-# Install — fresh repo (no existing hooks)
+# Install — fresh repo
 # ============================================================================
 
 @test "install: creates dispatcher" {
-  run_install
+  run_pre_commit
   [ -f "$REPO/.git/hooks/pre-commit" ]
   grep -q "pre-commit.d" "$REPO/.git/hooks/pre-commit"
 }
 
 @test "install: creates pre-commit.d directory" {
-  run_install
+  run_pre_commit
   [ -d "$REPO/.git/hooks/pre-commit.d" ]
 }
 
 @test "install: creates codebase hook script" {
-  run_install
+  run_pre_commit
   [ -x "$REPO/.git/hooks/pre-commit.d/codebase" ]
 }
 
 @test "install: hook contains configured rules" {
-  run_install
+  run_pre_commit
   grep -q "mise-settings" "$REPO/.git/hooks/pre-commit.d/codebase"
   grep -q "gum-table" "$REPO/.git/hooks/pre-commit.d/codebase"
 }
 
 @test "install: hook contains scope mappings" {
-  run_install
-  # gum-table should have .mise/tasks scope (from config)
+  run_pre_commit
   grep -q '.mise/tasks' "$REPO/.git/hooks/pre-commit.d/codebase"
-  # mise-settings should have . scope (default)
-  grep -q 'mise-settings' "$REPO/.git/hooks/pre-commit.d/codebase"
 }
 
 @test "install: dispatcher is executable" {
-  run_install
+  run_pre_commit
   [ -x "$REPO/.git/hooks/pre-commit" ]
 }
 
 # ============================================================================
-# Install — existing dispatcher (e.g. den with obfuscation hook)
+# Install — existing dispatcher
 # ============================================================================
 
-@test "install: preserves existing dispatcher" {
-  # Set up existing dispatcher + another hook
+@test "install: preserves existing dispatcher and other hooks" {
   mkdir -p "$REPO/.git/hooks/pre-commit.d"
   cat > "$REPO/.git/hooks/pre-commit" <<'EOF'
 #!/usr/bin/env bash
-# Pre-commit dispatcher — runs all executable scripts in pre-commit.d/
 set -eo pipefail
 HOOK_DIR="$(dirname "$0")/pre-commit.d"
 for hook in "$HOOK_DIR"/*; do
@@ -91,14 +85,11 @@ done
 EOF
   chmod +x "$REPO/.git/hooks/pre-commit"
   echo '#!/usr/bin/env bash' > "$REPO/.git/hooks/pre-commit.d/other-hook"
-  echo 'echo other' >> "$REPO/.git/hooks/pre-commit.d/other-hook"
   chmod +x "$REPO/.git/hooks/pre-commit.d/other-hook"
 
-  run_install
+  run_pre_commit
 
-  # Other hook should still be there
   [ -f "$REPO/.git/hooks/pre-commit.d/other-hook" ]
-  # Codebase hook should be added
   [ -f "$REPO/.git/hooks/pre-commit.d/codebase" ]
 }
 
@@ -109,57 +100,108 @@ EOF
 @test "install: errors when existing plain hook is not a dispatcher" {
   cat > "$REPO/.git/hooks/pre-commit" <<'EOF'
 #!/usr/bin/env bash
-echo "I am a custom hook"
+echo "custom hook"
 EOF
   chmod +x "$REPO/.git/hooks/pre-commit"
 
-  run bash -c "usage_target='$REPO' bash '$INSTALL'"
+  run bash -c "cd '$REPO' && bash '$TASK'"
   [ "$status" -ne 0 ]
   [[ "$output" == *"not a dispatcher"* ]]
 }
 
 # ============================================================================
-# Install — idempotent
+# Idempotent
 # ============================================================================
 
 @test "install: running twice is safe" {
-  run_install
-  run_install
-  # Should still work, only one codebase hook
+  run_pre_commit
+  run run_pre_commit
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"up to date"* ]]
   [ -f "$REPO/.git/hooks/pre-commit.d/codebase" ]
-  count=$(ls "$REPO/.git/hooks/pre-commit.d/" | wc -l | tr -d ' ')
-  [ "$count" -eq 1 ]
 }
 
 # ============================================================================
-# Install — error cases
+# --check
 # ============================================================================
 
-@test "install: fails on non-git directory" {
-  run bash -c "usage_target='$BATS_TEST_TMPDIR' bash '$INSTALL'"
-  [ "$status" -ne 0 ]
-  [[ "$output" == *"not a git repository"* ]]
+@test "check: exits 0 when hook is current" {
+  run_pre_commit
+  run bash -c "cd '$REPO' && bash '$TASK' --check"
+  [ "$status" -eq 0 ]
 }
 
-@test "install: fails when no mise.toml" {
-  rm "$REPO/mise.toml"
-  run bash -c "usage_target='$REPO' bash '$INSTALL'"
+@test "check: exits 1 when hook is missing" {
+  run run_pre_commit --check
   [ "$status" -ne 0 ]
-  [[ "$output" == *"no mise.toml"* ]]
 }
 
-@test "install: fails when no lint rules configured" {
+@test "check: exits 1 when hook is outdated" {
+  run_pre_commit
+  # Tamper with the hook
+  echo "# modified" >> "$REPO/.git/hooks/pre-commit.d/codebase"
+  run run_pre_commit --check
+  [ "$status" -ne 0 ]
+}
+
+@test "check: makes no changes" {
+  run_pre_commit
+  # Record state
+  cp "$REPO/.git/hooks/pre-commit.d/codebase" "$BATS_TEST_TMPDIR/before"
+  run bash -c "cd '$REPO' && bash '$TASK' --check"
+  diff -q "$BATS_TEST_TMPDIR/before" "$REPO/.git/hooks/pre-commit.d/codebase"
+}
+
+@test "check: exits 1 when no config" {
   cat > "$REPO/mise.toml" <<'EOF'
 [tools]
 bats = "1.13.0"
 EOF
-  run bash -c "usage_target='$REPO' bash '$INSTALL'"
+  run run_pre_commit --check
   [ "$status" -ne 0 ]
-  [[ "$output" == *"no lint rules"* ]]
 }
 
-@test "install: uses default scope when no override" {
-  # Remove scope section
+# ============================================================================
+# --revert
+# ============================================================================
+
+@test "revert: removes codebase hook" {
+  run_pre_commit
+  [ -f "$REPO/.git/hooks/pre-commit.d/codebase" ]
+  run_pre_commit --revert
+  [ ! -f "$REPO/.git/hooks/pre-commit.d/codebase" ]
+}
+
+@test "revert: cleans up empty dispatcher" {
+  run_pre_commit
+  run_pre_commit --revert
+  [ ! -f "$REPO/.git/hooks/pre-commit" ]
+  [ ! -d "$REPO/.git/hooks/pre-commit.d" ]
+}
+
+@test "revert: preserves dispatcher when other hooks exist" {
+  mkdir -p "$REPO/.git/hooks/pre-commit.d"
+  echo '#!/usr/bin/env bash' > "$REPO/.git/hooks/pre-commit.d/other"
+  chmod +x "$REPO/.git/hooks/pre-commit.d/other"
+
+  run_pre_commit
+  run_pre_commit --revert
+
+  [ -f "$REPO/.git/hooks/pre-commit.d/other" ]
+  [ ! -f "$REPO/.git/hooks/pre-commit.d/codebase" ]
+}
+
+@test "revert: no-op when not installed" {
+  run run_pre_commit --revert
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No codebase hook"* ]]
+}
+
+# ============================================================================
+# Scope
+# ============================================================================
+
+@test "scope: uses default when no override" {
   cat > "$REPO/mise.toml" <<'EOF'
 [settings]
 quiet = true
@@ -167,12 +209,11 @@ quiet = true
 [_.codebase]
 lint = ["gum-table"]
 EOF
-  run_install
-  # gum-table should use default scope .mise/tasks
+  run_pre_commit
   grep -q '.mise/tasks' "$REPO/.git/hooks/pre-commit.d/codebase"
 }
 
-@test "install: scope override takes precedence over default" {
+@test "scope: override takes precedence" {
   cat > "$REPO/mise.toml" <<'EOF'
 [settings]
 quiet = true
@@ -183,52 +224,33 @@ lint = ["gum-table"]
 [_.codebase.scope]
 gum-table = "src/scripts"
 EOF
-  run_install
+  run_pre_commit
   grep -q 'src/scripts' "$REPO/.git/hooks/pre-commit.d/codebase"
 }
 
 # ============================================================================
-# Uninstall
+# Error handling
 # ============================================================================
 
-@test "uninstall: removes codebase hook" {
-  run_install
-  [ -f "$REPO/.git/hooks/pre-commit.d/codebase" ]
-  run_uninstall
-  [ ! -f "$REPO/.git/hooks/pre-commit.d/codebase" ]
-}
-
-@test "uninstall: cleans up empty dispatcher" {
-  run_install
-  run_uninstall
-  [ ! -f "$REPO/.git/hooks/pre-commit" ]
-  [ ! -d "$REPO/.git/hooks/pre-commit.d" ]
-}
-
-@test "uninstall: preserves dispatcher when other hooks exist" {
-  # Install dispatcher with another hook first
-  mkdir -p "$REPO/.git/hooks/pre-commit.d"
-  echo '#!/usr/bin/env bash' > "$REPO/.git/hooks/pre-commit.d/other"
-  chmod +x "$REPO/.git/hooks/pre-commit.d/other"
-
-  run_install
-  run_uninstall
-
-  # Dispatcher and other hook should remain
-  [ -f "$REPO/.git/hooks/pre-commit" ]
-  [ -f "$REPO/.git/hooks/pre-commit.d/other" ]
-  # Codebase hook should be gone
-  [ ! -f "$REPO/.git/hooks/pre-commit.d/codebase" ]
-}
-
-@test "uninstall: no-op when not installed" {
-  run run_uninstall
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"No codebase hook"* ]]
-}
-
-@test "uninstall: fails on non-git directory" {
-  run bash -c "usage_target='$BATS_TEST_TMPDIR' bash '$UNINSTALL'"
+@test "error: fails outside git repo" {
+  run bash -c "cd '$BATS_TEST_TMPDIR' && bash '$TASK'"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"not a git repository"* ]]
+  [[ "$output" == *"not in a git repository"* ]]
+}
+
+@test "error: fails when no mise.toml" {
+  rm "$REPO/mise.toml"
+  run bash -c "cd '$REPO' && bash '$TASK'"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no mise.toml"* ]]
+}
+
+@test "error: fails when no lint rules configured" {
+  cat > "$REPO/mise.toml" <<'EOF'
+[tools]
+bats = "1.13.0"
+EOF
+  run bash -c "cd '$REPO' && bash '$TASK'"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no lint rules"* ]]
 }
