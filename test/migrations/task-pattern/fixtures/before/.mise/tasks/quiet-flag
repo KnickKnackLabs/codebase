@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="mise run with -q flag"
+set -euo pipefail
+
+mise run -q email:quota
+RESULT=$(mise run -q email:list -n 5 2>/dev/null || true)
+echo "$RESULT"

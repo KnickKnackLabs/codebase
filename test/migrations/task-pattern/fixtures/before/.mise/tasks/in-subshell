@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="mise run inside subshell/command substitution"
+set -euo pipefail
+
+echo "Quota: $(mise run -q email:quota 2>/dev/null || echo "unknown")"
+ENVELOPES=$(mise run -q email:list -n 5 2>/dev/null || true)

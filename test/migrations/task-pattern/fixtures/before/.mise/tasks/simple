@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Simple mise run call"
+set -euo pipefail
+
+mise run ci:build
+echo "done"

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="mise run with arguments"
+set -euo pipefail
+
+_task ci:wait "$RUN_ID" --repo "$REPO" --timeout "$WAIT_TIMEOUT" > /dev/null
+_task agent:message "$AGENT" "$MESSAGE" $MODEL_ARG
+_task workflows:generate --check

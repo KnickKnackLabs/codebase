@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#MISE description="mise run in error/usage strings"
+set -euo pipefail
+
+AGENT="${usage_agent:?Usage: mise run agent:onboard <agent-name>}"
+FORCE="${usage_force:?Usage: mise run agent:provision <agent-name> [--force]}"
+
+echo "  eval \"\$(mise run -q shell)\""
+echo "Run: mise run gpg:setup $AGENT"

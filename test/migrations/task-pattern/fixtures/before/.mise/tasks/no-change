@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#MISE description="Lines that should NOT be migrated"
+set -euo pipefail
+
+# Usage strings referencing mise run should stay
+echo "Usage: mise run gpg:setup <agent>"
+echo "  mise run pm:field-options Status 'Backlog,Ready'"
+
+# _task calls should stay unchanged
+_task ci:build
+_task -q email:send
+
+# Comments should stay unchanged
+# Run: mise run gpg:setup baby-joel
