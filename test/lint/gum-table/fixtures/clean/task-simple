@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Simple printf without padding — not a table"
+set -euo pipefail
+
+printf "Hello %s\n" "$name"
+printf "Count: %d\n" "$count"
+printf "%s done.\n" "$task"

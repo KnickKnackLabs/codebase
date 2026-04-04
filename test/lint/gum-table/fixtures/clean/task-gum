@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#MISE description="Already using gum table"
+set -euo pipefail
+
+{
+  printf "Name\tStatus\tPin\n"
+  printf "%s\t%s\t%s\n" "$name" "$status" "$pin"
+} | gum table --print --separator "	"

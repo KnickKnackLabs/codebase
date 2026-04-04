@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Padding pattern in a usage/help string"
+set -euo pipefail
+
+AGENT="${usage_agent:?Usage: printf '%-20s' is not a table}"
+echo "Run: printf '%-10s  %s' name status"

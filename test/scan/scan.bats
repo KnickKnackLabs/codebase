@@ -12,18 +12,21 @@ setup() {
 run_scan() {
   local pattern=""
   local lang="bash"
+  local excludes=""
   local targets=()
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -l|--lang) lang="$2"; shift 2 ;;
       -p|--pattern) pattern="$2"; shift 2 ;;
+      -e|--exclude) excludes="$2"; shift 2 ;;
       *) targets+=("$1"); shift ;;
     esac
   done
 
   usage_pattern="$pattern" \
   usage_lang="$lang" \
+  usage_excludes="$excludes" \
   usage_targets="${targets[*]}" \
   bash "$TASK"
 }
@@ -102,6 +105,32 @@ run_scan() {
   # Only fixtures-a has _task calls
   [[ "$output" == *"fixtures:"* ]]
   [[ "$output" != *"fixtures-b:"* ]]
+}
+
+# ============================================================================
+# Exclude filter
+# ============================================================================
+
+@test "exclude: filters out files matching glob" {
+  run run_scan -p 'mise run $$$ARGS' -e '.mise/tasks/ci/*' "$FIXTURES_A"
+  [ "$status" -eq 0 ]
+  # ci/ tasks should be excluded — no ci:lint or ci:test hits
+  [[ "$output" != *"ci/build"* ]]
+  [[ "$output" != *"ci/test"* ]]
+  # util/clean has a mise run call via deploy which calls it — but util/clean
+  # itself doesn't have mise run. Only ci/ tasks have mise run calls.
+  [[ -z "$output" ]]
+}
+
+@test "exclude: keeps non-matching files" {
+  run run_scan -p 'set -euo pipefail' -e '.mise/tasks/ci/*' "$FIXTURES_A"
+  [ "$status" -eq 0 ]
+  # util/clean should still be scanned
+  [[ "$output" == *"util/clean"* ]]
+  # ci/ files should be excluded
+  [[ "$output" != *"ci/build"* ]]
+  [[ "$output" != *"ci/test"* ]]
+  [[ "$output" != *"ci/deploy"* ]]
 }
 
 # ============================================================================

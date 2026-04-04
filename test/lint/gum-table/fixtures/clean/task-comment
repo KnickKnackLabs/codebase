@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Padding pattern in a comment — should not trigger"
+set -euo pipefail
+
+# Old code: printf "%-20s  %s\n" "$name" "$status"
+echo "$name: $status"

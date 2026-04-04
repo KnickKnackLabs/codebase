@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Column command for table formatting"
+set -euo pipefail
+
+echo -e "NAME\tSTATUS\tPIN" 
+echo "$manifest" | jq -r '.[] | "\(.name)\t\(.status)\t\(.pin)"' | column -t

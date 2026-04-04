@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Single padded column in a loop"
+set -euo pipefail
+
+while read -r name status; do
+  printf "%-30s  %s\n" "$name" "$status"
+done < "$INPUT"

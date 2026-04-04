@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Manual column padding with printf"
+set -euo pipefail
+
+# Classic manual table — fixed-width columns
+printf "%-20s  %-10s  %s\n" "NAME" "STATUS" "VERSION"
+printf "%-20s  %-10s  %s\n" "$name" "ok" "$version"

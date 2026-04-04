@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+#MISE description="Detect manual table formatting that should use gum table"
+#USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+
+set -euo pipefail
+
+IFS=' ' read -ra TARGETS <<< "${usage_targets}"
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+  echo "ERROR: at least one target is required" >&2
+  exit 1
+fi
+
+# Find bash task files
+find_bash_tasks() {
+  local target="$1"
+  find "$target" -type f \( -name "*.sh" -o -name "*.bash" \) 2>/dev/null
+  find "$target" -type f ! -name "*.*" 2>/dev/null | while read -r f; do
+    if head -1 "$f" 2>/dev/null | grep -q '#!/usr/bin/env bash\|#!/bin/bash'; then
+      echo "$f"
+    fi
+  done
+}
+
+failures=0
+
+for target in "${TARGETS[@]}"; do
+  if [[ ! -e "$target" ]]; then
+    echo "ERROR: target does not exist: $target" >&2
+    exit 1
+  fi
+
+  while IFS= read -r file; do
+    rel="${file#"$target"/}"
+    hits=()
+
+    # Read file, skip comments and strings in non-executable contexts
+    lineno=0
+    while IFS= read -r line; do
+      lineno=$((lineno + 1))
+
+      # Skip comment lines
+      [[ "$line" =~ ^[[:space:]]*# ]] && continue
+
+      # Skip lines where the pattern is inside a :? error string
+      echo "$line" | grep -qE '\$\{[^}]*:\?.*%-[0-9]' && continue
+
+      # Skip echo/printf lines that are displaying usage instructions (not live code)
+      # Heuristic: echo/printf of a literal string containing %-
+      if echo "$line" | grep -qE '^[[:space:]]*(echo|Echo) ".*%-[0-9]+'; then
+        continue
+      fi
+
+      # Pattern 1: printf with fixed-width padding (%-Ns)
+      if echo "$line" | grep -qE 'printf.*%-[0-9]+s'; then
+        hits+=("$lineno: $line")
+      fi
+
+      # Pattern 2: piping to column -t
+      if echo "$line" | grep -qE '\|\s*column\s+-t'; then
+        hits+=("$lineno: $line")
+      fi
+
+    done < "$file"
+
+    if [[ ${#hits[@]} -gt 0 ]]; then
+      # Check if file already uses gum table (suppress if so)
+      if grep -q 'gum table' "$file"; then
+        continue
+      fi
+
+      name=$(basename "$target")
+      for hit in "${hits[@]}"; do
+        echo "WARN  $name:$rel:$hit"
+      done
+      failures=$((failures + 1))
+    fi
+  done < <(find_bash_tasks "$target")
+done
+
+if [[ "$failures" -eq 0 ]]; then
+  echo "OK    no manual table formatting found"
+fi
+
+exit "$failures"

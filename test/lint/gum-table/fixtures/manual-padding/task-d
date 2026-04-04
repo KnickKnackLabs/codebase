@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Separator lines for manual tables"
+set -euo pipefail
+
+echo "Name                Status"
+printf '%40s\n' | tr ' ' '-'
+printf "%-20s  %s\n" "$name" "$status"

@@ -3,11 +3,13 @@
 #USAGE arg "<targets>…" help="Paths to codebases to scan (one or more)"
 #USAGE flag "-p --pattern <pattern>" required=#true help="ast-grep pattern to search for"
 #USAGE flag "-l --lang <lang>" help="Language (default: bash)"
+#USAGE flag "-e --exclude <excludes>" help="Glob patterns to exclude (space-separated)"
 
 set -euo pipefail
 
 PATTERN="${usage_pattern}"
 LANG="${usage_lang:-bash}"
+EXCLUDES="${usage_excludes:-}"
 
 if [[ -z "$PATTERN" ]]; then
   echo "ERROR: --pattern is required" >&2
@@ -56,6 +58,17 @@ scan_target() {
   local file_count=0
   while IFS= read -r src; do
     rel="${src#"$target"/}"
+
+    # Check excludes
+    if [[ -n "$EXCLUDES" ]]; then
+      skip=false
+      for glob in $EXCLUDES; do
+        # shellcheck disable=SC2254
+        case "$rel" in $glob) skip=true; break ;; esac
+      done
+      $skip && continue
+    fi
+
     dest="$work_dir/$rel.sh"
     mkdir -p "$(dirname "$dest")"
     cp "$src" "$dest"
