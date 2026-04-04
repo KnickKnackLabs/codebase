@@ -8,8 +8,10 @@ set -euo pipefail
 REVERT="${usage_revert:-false}"
 CHECK="${usage_check:-false}"
 
-# Find repo root from current directory
-REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
+# Find repo root — use CALLER_PWD (set by shiv) if available,
+# otherwise fall back to current directory
+CALLER="${CALLER_PWD:-$(pwd)}"
+REPO_ROOT=$(git -C "$CALLER" rev-parse --show-toplevel 2>/dev/null || true)
 if [[ -z "$REPO_ROOT" ]]; then
   echo "ERROR: not in a git repository" >&2
   exit 1

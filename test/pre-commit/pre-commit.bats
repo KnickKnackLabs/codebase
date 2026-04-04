@@ -30,7 +30,7 @@ run_pre_commit() {
       --check) check="true" ;;
     esac
   done
-  cd "$REPO" && usage_revert="$revert" usage_check="$check" bash "$TASK"
+  CALLER_PWD="$REPO" usage_revert="$revert" usage_check="$check" bash "$TASK"
 }
 
 # ============================================================================
@@ -104,7 +104,7 @@ echo "custom hook"
 EOF
   chmod +x "$REPO/.git/hooks/pre-commit"
 
-  run bash -c "cd '$REPO' && bash '$TASK'"
+  run bash -c "CALLER_PWD='$REPO' bash '$TASK'"
   [ "$status" -ne 0 ]
   [[ "$output" == *"not a dispatcher"* ]]
 }
@@ -233,14 +233,14 @@ EOF
 # ============================================================================
 
 @test "error: fails outside git repo" {
-  run bash -c "cd '$BATS_TEST_TMPDIR' && bash '$TASK'"
+  run bash -c "CALLER_PWD='$BATS_TEST_TMPDIR' bash '$TASK'"
   [ "$status" -ne 0 ]
   [[ "$output" == *"not in a git repository"* ]]
 }
 
 @test "error: fails when no mise.toml" {
   rm "$REPO/mise.toml"
-  run bash -c "cd '$REPO' && bash '$TASK'"
+  run bash -c "CALLER_PWD='$REPO' bash '$TASK'"
   [ "$status" -ne 0 ]
   [[ "$output" == *"no mise.toml"* ]]
 }
@@ -250,7 +250,7 @@ EOF
 [tools]
 bats = "1.13.0"
 EOF
-  run bash -c "cd '$REPO' && bash '$TASK'"
+  run bash -c "CALLER_PWD='$REPO' bash '$TASK'"
   [ "$status" -ne 0 ]
   [[ "$output" == *"no lint rules"* ]]
 }
