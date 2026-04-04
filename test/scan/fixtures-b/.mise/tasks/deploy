@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Deploy service"
+set -euo pipefail
+
+mise run build
+echo "Deploying..."

@@ -3,7 +3,8 @@
 
 setup() {
   CODEBASE_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
-  FIXTURES="$BATS_TEST_DIRNAME/fixtures"
+  FIXTURES_A="$BATS_TEST_DIRNAME/fixtures"
+  FIXTURES_B="$BATS_TEST_DIRNAME/fixtures-b"
   TASK="$CODEBASE_DIR/.mise/tasks/scan"
 }
 
@@ -11,28 +12,28 @@ setup() {
 run_scan() {
   local pattern=""
   local lang="bash"
-  local target=""
+  local targets=()
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -l|--lang) lang="$2"; shift 2 ;;
       -p|--pattern) pattern="$2"; shift 2 ;;
-      *) target="$1"; shift ;;
+      *) targets+=("$1"); shift ;;
     esac
   done
 
   usage_pattern="$pattern" \
   usage_lang="$lang" \
-  usage_target="$target" \
+  usage_targets="${targets[*]}" \
   bash "$TASK"
 }
 
 # ============================================================================
-# Basic matching
+# Single target (basic matching)
 # ============================================================================
 
 @test "scan: finds mise run calls in extension-less task files" {
-  run run_scan -p 'mise run $$$ARGS' "$FIXTURES"
+  run run_scan -p 'mise run $$$ARGS' "$FIXTURES_A"
   [ "$status" -eq 0 ]
   [[ "$output" == *"mise run ci:lint"* ]]
   [[ "$output" == *"mise run ci:test --verbose"* ]]
@@ -40,20 +41,20 @@ run_scan() {
 }
 
 @test "scan: reports file paths for matches" {
-  run run_scan -p 'mise run $$$ARGS' "$FIXTURES"
+  run run_scan -p 'mise run $$$ARGS' "$FIXTURES_A"
   [ "$status" -eq 0 ]
   [[ "$output" == *"ci/build"* ]]
   [[ "$output" == *"ci/test"* ]]
 }
 
 @test "scan: does not match _task calls" {
-  run run_scan -p 'mise run $$$ARGS' "$FIXTURES"
+  run run_scan -p 'mise run $$$ARGS' "$FIXTURES_A"
   [ "$status" -eq 0 ]
   [[ "$output" != *"_task ci:build"* ]]
 }
 
 @test "scan: returns no output when pattern has no matches" {
-  run run_scan -p 'docker run $$$ARGS' "$FIXTURES"
+  run run_scan -p 'docker run $$$ARGS' "$FIXTURES_A"
   [ "$status" -eq 0 ]
   [[ -z "$output" ]]
 }
@@ -63,29 +64,61 @@ run_scan() {
 # ============================================================================
 
 @test "scan: finds _task calls with custom pattern" {
-  run run_scan -p '_task $$$ARGS' "$FIXTURES"
+  run run_scan -p '_task $$$ARGS' "$FIXTURES_A"
   [ "$status" -eq 0 ]
   [[ "$output" == *"_task ci:build"* ]]
 }
 
 @test "scan: finds set -euo pipefail" {
-  run run_scan -p 'set -euo pipefail' "$FIXTURES"
+  run run_scan -p 'set -euo pipefail' "$FIXTURES_A"
   [ "$status" -eq 0 ]
-  # All 4 fixture files have it
   count=$(echo "$output" | grep -c "set -euo pipefail")
   [ "$count" -eq 4 ]
+}
+
+# ============================================================================
+# Multiple targets
+# ============================================================================
+
+@test "multi: finds matches across multiple codebases" {
+  run run_scan -p 'mise run $$$ARGS' "$FIXTURES_A" "$FIXTURES_B"
+  [ "$status" -eq 0 ]
+  # fixtures-a has mise run calls
+  [[ "$output" == *"mise run ci:lint"* ]]
+  # fixtures-b has a mise run call
+  [[ "$output" == *"mise run build"* ]]
+}
+
+@test "multi: prefixes output with codebase name" {
+  run run_scan -p 'mise run $$$ARGS' "$FIXTURES_A" "$FIXTURES_B"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"fixtures:"* ]]
+  [[ "$output" == *"fixtures-b:"* ]]
+}
+
+@test "multi: handles mix of matching and non-matching targets" {
+  run run_scan -p '_task $$$ARGS' "$FIXTURES_A" "$FIXTURES_B"
+  [ "$status" -eq 0 ]
+  # Only fixtures-a has _task calls
+  [[ "$output" == *"fixtures:"* ]]
+  [[ "$output" != *"fixtures-b:"* ]]
 }
 
 # ============================================================================
 # Error handling
 # ============================================================================
 
-@test "scan: fails when no pattern provided" {
-  run run_scan "$FIXTURES"
+@test "error: fails when no pattern provided" {
+  run run_scan "$FIXTURES_A"
   [ "$status" -ne 0 ]
 }
 
-@test "scan: fails when target does not exist" {
+@test "error: fails when target does not exist" {
   run run_scan -p 'mise run $$$ARGS' "/nonexistent/path"
+  [ "$status" -ne 0 ]
+}
+
+@test "error: fails when any target in multi does not exist" {
+  run run_scan -p 'mise run $$$ARGS' "$FIXTURES_A" "/nonexistent/path"
   [ "$status" -ne 0 ]
 }
