@@ -21,7 +21,7 @@ fi
 
 if ! command -v shellcheck >/dev/null 2>&1; then
   echo "ERROR: shellcheck not found on PATH" >&2
-  exit 2
+  exit 127  # Unix convention: 127 = command not found
 fi
 
 # Discover shell files in a target: .mise/tasks/** (anything with a bash
@@ -79,7 +79,11 @@ for target in "${TARGETS[@]}"; do
   # Pass absolute paths (no cd) — avoids mise re-activating inside the
   # target dir. shellcheck still finds .shellcheckrc by walking up from
   # each file's own directory.
-  violations=""
+  #
+  # --shell=bash is hardcoded: KKL convention is bash-only for .mise/tasks
+  # and lib/*.sh files. If POSIX-sh scripts ever land in a target, they'll
+  # get spurious bash-ism warnings — revisit by letting shellcheck infer
+  # shell from shebang instead.
   if ! violations=$(shellcheck --exclude="$DEFAULT_EXCLUDES" --shell=bash "${files[@]}" 2>&1); then
     count=$(printf '%s\n' "$violations" | grep -cE '^In .* line [0-9]+:' || true)
     echo "FAIL  $name: $count violation(s)"

@@ -48,6 +48,35 @@ setup() {
 }
 
 # ============================================================================
+# Default excludes (SC1091, SC2034, SC2154)
+#
+# The fixture excludes-applied/ triggers all three codes in DEFAULT_EXCLUDES.
+# These tests prove the defaults actually suppress them — without this
+# coverage, the exclude list could silently regress.
+# ============================================================================
+
+@test "lint: default excludes suppress SC1091/SC2034/SC2154" {
+  run codebase lint:shellcheck "$FIXTURES/excludes-applied"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK"*"excludes-applied"* ]]
+  [[ "$output" != *"SC1091"* ]]
+  [[ "$output" != *"SC2034"* ]]
+  [[ "$output" != *"SC2154"* ]]
+}
+
+@test "lint: confirms the excludes-applied fixture actually triggers the codes" {
+  # Meta-test: without our defaults, shellcheck flags the fixture.
+  # If this starts failing, the fixture stopped triggering SC1091/2034/2154
+  # and the test above becomes vacuously true.
+  local sc
+  sc=$(mise which shellcheck)
+  run "$sc" --shell=bash "$FIXTURES/excludes-applied/.mise/tasks/with-source"
+  [[ "$output" == *"SC1091"* ]]
+  [[ "$output" == *"SC2034"* ]]
+  [[ "$output" == *"SC2154"* ]]
+}
+
+# ============================================================================
 # Scope
 # ============================================================================
 
@@ -101,6 +130,10 @@ setup() {
   run codebase lint:shellcheck
   [ "$status" -ne 0 ]
   # mise's USAGE parser rejects the missing required <targets> arg
-  # before the task's own check fires.
-  [[ "$output" == *"Missing required arg"* ]] || [[ "$output" == *"targets"* ]]
+  # before the task's own check fires. Asserting on both the 'Missing
+  # required arg' literal and the arg name so the test breaks loudly if
+  # either changes — we *want* to notice a mise upgrade that reformats
+  # this error.
+  [[ "$output" == *"Missing required arg"* ]]
+  [[ "$output" == *"<targets>"* ]]
 }
