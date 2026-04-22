@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Canonical smell — '|| true'.
+mkdir -p /tmp/foo || true
+
+# POSIX-shorthand equivalent — '|| :'.
+rm /tmp/nope || :
+
+# Unspaced variant.
+mv /tmp/a /tmp/b ||:
+
+# Inside a command substitution — terminated by ')', not by whitespace.
+out=$(cat /tmp/maybe 2>/dev/null || true)
+
+# Piped after a '|| true' — terminator is '|'.
+stat /tmp/x || true | head -1

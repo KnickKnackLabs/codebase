@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Extensionless shebang file, not under .mise/tasks — broad walk must find it.
+echo "ok" || :

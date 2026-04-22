@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# This usage is legitimate (grep -c exits 1 on no matches) and annotated.
+count=$(grep -c "needle" /tmp/haystack || true)  # codebase:ignore — grep -c
+
+echo "$count"
