@@ -1,10 +1,10 @@
 #!/usr/bin/env bats
 # Tests for mise-settings lint rule
 
+load ../../test_helper
+
 setup() {
-  CODEBASE_DIR="$(cd "$BATS_TEST_DIRNAME/../../.." && pwd)"
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
-  LINT="$CODEBASE_DIR/.mise/tasks/lint/mise-settings"
 }
 
 # ============================================================================
@@ -12,13 +12,13 @@ setup() {
 # ============================================================================
 
 @test "lint: passes when all settings present" {
-  run bash -c "usage_targets='$FIXTURES/complete' bash '$LINT'"
+  run codebase lint:mise-settings "$FIXTURES/complete"
   [ "$status" -eq 0 ]
   [[ "$output" == *"OK"* ]]
 }
 
 @test "lint: fails when both settings missing" {
-  run bash -c "usage_targets='$FIXTURES/missing-both' bash '$LINT'"
+  run codebase lint:mise-settings "$FIXTURES/missing-both"
   [ "$status" -ne 0 ]
   [[ "$output" == *"FAIL"* ]]
   [[ "$output" == *"quiet = true"* ]]
@@ -26,7 +26,7 @@ setup() {
 }
 
 @test "lint: fails when only task_output missing" {
-  run bash -c "usage_targets='$FIXTURES/missing-output' bash '$LINT'"
+  run codebase lint:mise-settings "$FIXTURES/missing-output"
   [ "$status" -ne 0 ]
   [[ "$output" == *"FAIL"* ]]
   [[ "$output" == *'task_output = "interleave"'* ]]
@@ -35,20 +35,20 @@ setup() {
 }
 
 @test "lint: fails when no mise.toml exists" {
-  run bash -c "usage_targets='$FIXTURES/no-toml' bash '$LINT'"
+  run codebase lint:mise-settings "$FIXTURES/no-toml"
   [ "$status" -ne 0 ]
   [[ "$output" == *"FAIL"* ]]
   [[ "$output" == *"no mise.toml"* ]]
 }
 
 @test "lint: skips when codebase:ignore mise-settings is set" {
-  run bash -c "usage_targets='$FIXTURES/ignored' bash '$LINT'"
+  run codebase lint:mise-settings "$FIXTURES/ignored"
   [ "$status" -eq 0 ]
   [[ "$output" == *"SKIP"* ]]
 }
 
 @test "lint: checks multiple targets" {
-  run bash -c "usage_targets='$FIXTURES/complete $FIXTURES/missing-both' bash '$LINT'"
+  run codebase lint:mise-settings "$FIXTURES/complete" "$FIXTURES/missing-both"
   [ "$status" -ne 0 ]
   [[ "$output" == *"OK"*"complete"* ]]
   [[ "$output" == *"FAIL"*"missing-both"* ]]
@@ -62,7 +62,7 @@ setup() {
   WORK_DIR="$BATS_TEST_TMPDIR/fix-test"
   cp -r "$FIXTURES/missing-both" "$WORK_DIR"
 
-  run bash -c "usage_targets='$WORK_DIR' usage_fix=true bash '$LINT'"
+  run codebase lint:mise-settings --fix "$WORK_DIR"
   [ "$status" -eq 0 ]
   [[ "$output" == *"FIXED"* ]]
 
@@ -75,7 +75,7 @@ setup() {
   WORK_DIR="$BATS_TEST_TMPDIR/fix-partial"
   cp -r "$FIXTURES/missing-output" "$WORK_DIR"
 
-  run bash -c "usage_targets='$WORK_DIR' usage_fix=true bash '$LINT'"
+  run codebase lint:mise-settings --fix "$WORK_DIR"
   [ "$status" -eq 0 ]
   [[ "$output" == *"FIXED"* ]]
 
@@ -91,7 +91,7 @@ setup() {
   WORK_DIR="$BATS_TEST_TMPDIR/fix-noop"
   cp -r "$FIXTURES/complete" "$WORK_DIR"
 
-  run bash -c "usage_targets='$WORK_DIR' usage_fix=true bash '$LINT'"
+  run codebase lint:mise-settings --fix "$WORK_DIR"
   [ "$status" -eq 0 ]
   [[ "$output" == *"OK"* ]]
 }
@@ -101,6 +101,6 @@ setup() {
 # ============================================================================
 
 @test "lint: fails when target does not exist" {
-  run bash -c "usage_targets='/nonexistent' bash '$LINT'"
+  run codebase lint:mise-settings /nonexistent
   [ "$status" -ne 0 ]
 }

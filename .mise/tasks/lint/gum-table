@@ -23,12 +23,13 @@ find_bash_tasks() {
 }
 
 # Scan a single file. Single-pass: track loop depth as we go,
-# classify hits inline. No subprocess per line.
+# classify hits inline. Emits hits on stdout, one per line.
+# (Bash 3 compatible — no namerefs.)
 scan_file() {
   local file="$1"
-  local -n _hits=$2
   local loop_depth=0
   local lineno=0
+  local line
 
   while IFS= read -r line; do
     lineno=$((lineno + 1))
@@ -55,16 +56,16 @@ scan_file() {
 
     # Pattern: column -t
     if [[ "$line" == *'| column -t'* ]] || [[ "$line" == *'|column -t'* ]]; then
-      _hits+=("[column-t] $lineno: $line")
+      echo "[column-t] $lineno: $line"
       continue
     fi
 
     # Pattern: printf with %-Ns
     if [[ "$line" == *'printf'*'%-'*'s'* ]]; then
       if [[ $loop_depth -gt 0 ]]; then
-        _hits+=("[loop-table] $lineno: $line")
+        echo "[loop-table] $lineno: $line"
       else
-        _hits+=("[padding] $lineno: $line")
+        echo "[padding] $lineno: $line"
       fi
     fi
 
@@ -83,7 +84,9 @@ for target in "${TARGETS[@]}"; do
     rel="${file#"$target"/}"
     hits=()
 
-    scan_file "$file" hits
+    while IFS= read -r _hit; do
+      [[ -n "$_hit" ]] && hits+=("$_hit")
+    done < <(scan_file "$file")
 
     if [[ ${#hits[@]} -gt 0 ]]; then
       # Check if file already uses gum table (suppress if so)
