@@ -49,6 +49,7 @@ scan_file() {
     [[ "$line" == *"codebase:ignore"* ]] && continue
 
     # Skip error strings
+    # shellcheck disable=SC2016  # intentional: match literal '${' as a pattern
     [[ "$line" == *'${'*':?'*'%-'* ]] && continue
 
     # Skip echo'd usage instructions

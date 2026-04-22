@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# This file deliberately triggers the three codes in DEFAULT_EXCLUDES so
+# the lint task's default behavior can be verified:
+#   - SC1091: source /nonexistent/path  (linter can't follow)
+#   - SC2034: var set but never used    (linter can't see external use)
+#   - SC2154: var referenced but never assigned in this file
+set -euo pipefail
+
+source /nonexistent/path/that/shellcheck/cannot/follow
+
+UNUSED_LOOKS_LIKE="exported indirectly"
+export -f UNUSED_LOOKS_LIKE
+
+# $usage_name is provided by mise's USAGE parser, not assigned here.
+echo "$usage_name"
