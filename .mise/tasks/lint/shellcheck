@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-#MISE description="Run shellcheck against bash task and lib files in a codebase"
+#MISE description="Run shellcheck against shell files in a codebase"
 #USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
 
 set -euo pipefail
+
+# shellcheck source=../../../lib/shell-files.sh
+source "$MISE_PROJECT_ROOT/lib/shell-files.sh"
 
 # Default exclude codes — conventions shared across KKL bash codebases:
 #   SC1091 — Not following sourced files (MISE_CONFIG_ROOT resolves at runtime)
@@ -23,30 +26,6 @@ if ! command -v shellcheck >/dev/null 2>&1; then
   echo "ERROR: shellcheck not found on PATH" >&2
   exit 127  # Unix convention: 127 = command not found
 fi
-
-# Discover shell files in a target: .mise/tasks/** (anything with a bash
-# shebang or a .sh extension) plus lib/*.sh.
-discover_shell_files() {
-  local target="$1"
-
-  if [[ -d "$target/.mise/tasks" ]]; then
-    find "$target/.mise/tasks" -type f 2>/dev/null | while read -r f; do
-      case "$f" in
-        *.sh|*.bash) echo "$f" ;;
-        *)
-          # No extension — check shebang
-          if head -1 "$f" 2>/dev/null | grep -qE '^#!.*(bash|sh)\b'; then
-            echo "$f"
-          fi
-          ;;
-      esac
-    done
-  fi
-
-  if [[ -d "$target/lib" ]]; then
-    find "$target/lib" -type f \( -name "*.sh" -o -name "*.bash" \) 2>/dev/null
-  fi
-}
 
 failures=0
 
@@ -80,10 +59,9 @@ for target in "${TARGETS[@]}"; do
   # target dir. shellcheck still finds .shellcheckrc by walking up from
   # each file's own directory.
   #
-  # --shell=bash is hardcoded: KKL convention is bash-only for .mise/tasks
-  # and lib/*.sh files. If POSIX-sh scripts ever land in a target, they'll
-  # get spurious bash-ism warnings — revisit by letting shellcheck infer
-  # shell from shebang instead.
+  # --shell=bash is hardcoded: KKL convention is bash-only. If POSIX-sh
+  # scripts ever land in a target, they'll get spurious bash-ism warnings
+  # — revisit by letting shellcheck infer shell from shebang instead.
   if ! violations=$(shellcheck --exclude="$DEFAULT_EXCLUDES" --shell=bash "${files[@]}" 2>&1); then
     count=$(printf '%s\n' "$violations" | grep -cE '^In .* line [0-9]+:' || true)
     echo "FAIL  $name: $count violation(s)"
