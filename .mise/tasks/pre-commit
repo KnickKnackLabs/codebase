@@ -11,7 +11,9 @@ CHECK="${usage_check:-false}"
 # Find repo root — use CALLER_PWD (set by shiv) if available,
 # otherwise fall back to current directory
 CALLER="${CALLER_PWD:-$(pwd)}"
-REPO_ROOT=$(git -C "$CALLER" rev-parse --show-toplevel 2>/dev/null || true)
+if ! REPO_ROOT=$(git -C "$CALLER" rev-parse --show-toplevel 2>/dev/null); then
+  REPO_ROOT=""
+fi
 if [[ -z "$REPO_ROOT" ]]; then
   echo "ERROR: not in a git repository" >&2
   exit 1
@@ -152,7 +154,9 @@ __SCOPE_CASE__
   output=$(codebase lint:"$rule" "$target" 2>&1) || status=$?
   if [ "${status:-0}" -ne 0 ]; then
     echo "codebase: lint:$rule failed" >&2
-    echo "$output" | grep -v '^INFO' | grep -v '^OK' | grep -v '\[lint:' >&2 || true
+    if filtered=$(echo "$output" | grep -vE '^(INFO|OK)|\[lint:'); then
+      echo "$filtered" >&2
+    fi
     failures=$((failures + 1))
   fi
 done

@@ -63,7 +63,7 @@ for target in "${TARGETS[@]}"; do
   # scripts ever land in a target, they'll get spurious bash-ism warnings
   # — revisit by letting shellcheck infer shell from shebang instead.
   if ! violations=$(shellcheck --exclude="$DEFAULT_EXCLUDES" --shell=bash "${files[@]}" 2>&1); then
-    count=$(printf '%s\n' "$violations" | grep -cE '^In .* line [0-9]+:' || true)
+    count=$(printf '%s\n' "$violations" | grep -cE '^In .* line [0-9]+:' || true)  # codebase:ignore or-true — grep -c exits 1 on zero matches
     echo "FAIL  $name: $count violation(s)"
     printf '%s\n' "$violations" | sed 's/^/  /'
     failures=$((failures + 1))

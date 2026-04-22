@@ -70,7 +70,10 @@ scan_target() {
     return
   fi
 
-  raw_output=$(sg run --pattern "$PATTERN" -l "$LANG" --no-ignore hidden "$work_dir" 2>/dev/null || true)
+  # sg exits non-zero on no matches; treat empty output as "nothing found".
+  if ! raw_output=$(sg run --pattern "$PATTERN" -l "$LANG" --no-ignore hidden "$work_dir" 2>/dev/null); then
+    raw_output=""
+  fi
   rm -rf "$work_dir"
 
   if [[ -z "$raw_output" ]]; then
