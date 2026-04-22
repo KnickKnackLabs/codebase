@@ -37,11 +37,13 @@ fi
 #   '||:'      — unspaced variant of the above
 #
 # Terminator char-class covers every place a statement can end inside
-# bash: whitespace, EOL, ';', '&' ('&&' too), '|' (pipe / '||'), and the
-# closing brackets ')' '}' that end command-substitutions, subshells, or
-# groupings. Without ')', we'd miss hits like 'foo=$(cmd || true)' — a
-# common fallback-assignment shape.
-TERM='([[:space:]]|$|[;&|)}])'
+# bash: whitespace, EOL, ';', '&' ('&&' too), '|' (pipe / '||'), closing
+# brackets ')' '}' (command-substitutions, subshells, groupings), and
+# the redirection operators '>' and '<'. Without ')', we'd miss hits
+# like 'foo=$(cmd || true)' — a common fallback-assignment shape. Without
+# '><' we'd miss 'cmd || true>file' and the '|| :>/dev/null' truncation
+# trick.
+TERM='([[:space:]]|$|[;&|)}><])'
 OR_TRUE_RE="\|\|[[:space:]]+true${TERM}"
 OR_COLON_RE="\|\|[[:space:]]*:${TERM}"
 

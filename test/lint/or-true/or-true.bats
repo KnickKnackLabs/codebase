@@ -36,10 +36,24 @@ setup() {
   [[ "$output" == *"||:"* ]]
 }
 
-@test "or-true: fail output names five occurrences in the dirty fixture" {
+@test "or-true: fail output names seven occurrences in the dirty fixture" {
   run codebase lint:or-true "$FIXTURES/dirty"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"5 occurrence"* ]]
+  [[ "$output" == *"7 occurrence"* ]]
+}
+
+@test "or-true: flags '|| true>file' (redirect terminator)" {
+  # Regression: terminator class was missing '>'/'<', so
+  # 'cmd || true>/tmp/foo' (valid shell) went unflagged.
+  run codebase lint:or-true "$FIXTURES/dirty"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"|| true>/tmp/discarded"* ]]
+}
+
+@test "or-true: flags '|| :>file' (colon-truncation trick)" {
+  run codebase lint:or-true "$FIXTURES/dirty"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"|| :>/tmp/emptied"* ]]
 }
 
 @test "or-true: flags '|| true)' inside command substitution" {
@@ -103,8 +117,47 @@ setup() {
 }
 
 # ============================================================================
+# Discovery correctness
+# ============================================================================
+
+@test "or-true: discovery skips non-bash/sh shebangs (fish, zsh, …)" {
+  # Regression: the shebang regex '^#!.*(bash|sh)\b' matched 'sh' as
+  # a suffix of fish/zsh/csh/dash/ksh. Broaden-fix added a leading
+  # word boundary. Fixture contains a fish script with '|| true';
+  # if discovery emits it, the rule fails — we assert it passes.
+  run codebase lint:or-true "$FIXTURES/shebang-overmatch"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK"*"shebang-overmatch"* ]]
+}
+
+@test "or-true: discovery prunes .git/ (hooks with '|| true' are ignored)" {
+  # Fixture contains .git/hooks/pre-commit with '|| true'. If the
+  # prune fails, the hook gets scanned and the target fails.
+  run codebase lint:or-true "$FIXTURES/git-dir"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK"*"git-dir"* ]]
+}
+
+# ============================================================================
 # Comment handling
 # ============================================================================
+
+@test "or-true: does not flag '|| true' inside a single-quoted string" {
+  # Accidental protection: the closing quote ''' is not in the
+  # terminator class, so 'echo '"'"'foo || true'"'"'' goes unflagged.
+  # Codifying this behavior so we notice if the regex changes.
+  local tmp
+  tmp=$(mktemp -d)
+  mkdir -p "$tmp/.mise/tasks"
+  cat > "$tmp/.mise/tasks/t" <<'EOF'
+#!/usr/bin/env bash
+echo 'foo || true'
+EOF
+  run codebase lint:or-true "$tmp"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK"* ]]
+  rm -rf "$tmp"
+}
 
 @test "or-true: does not flag '|| true' inside a full-line comment" {
   # Built inline to avoid a dedicated fixture dir — prove comment lines

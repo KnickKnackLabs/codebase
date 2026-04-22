@@ -28,7 +28,8 @@ discover_shell_files() {
     -type d -name .git -prune -o \
     -type f ! -name "*.*" -print 2>/dev/null |
     while IFS= read -r f; do
-      if head -1 "$f" 2>/dev/null | grep -qE '^#!.*(bash|sh)\b'; then
+      # Leading \b prevents 'sh' matching as a suffix of fish/zsh/csh/dash/ksh.
+      if head -1 "$f" 2>/dev/null | grep -qE '^#!.*\b(bash|sh)\b'; then
         echo "$f"
       fi
     done
