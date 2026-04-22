@@ -1,14 +1,10 @@
 #!/usr/bin/env bats
 # Tests for gum-table lint rule — detecting manual table formatting
 
-setup() {
-  CODEBASE_DIR="$(cd "$BATS_TEST_DIRNAME/../../.." && pwd)"
-  FIXTURES="$BATS_TEST_DIRNAME/fixtures"
-  LINT="$CODEBASE_DIR/.mise/tasks/lint/gum-table"
-}
+load ../../test_helper
 
-run_lint() {
-  usage_targets="$1" bash "$LINT"
+setup() {
+  FIXTURES="$BATS_TEST_DIRNAME/fixtures"
 }
 
 # ============================================================================
@@ -16,7 +12,7 @@ run_lint() {
 # ============================================================================
 
 @test "column-t: detects piping to column -t" {
-  run run_lint "$FIXTURES/manual-padding/task-c"
+  run codebase lint:gum-table "$FIXTURES/manual-padding/task-c"
   [ "$status" -ne 0 ]
   [[ "$output" == *"[column-t]"* ]]
   [[ "$output" == *"WARN"* ]]
@@ -27,20 +23,20 @@ run_lint() {
 # ============================================================================
 
 @test "loop-table: detects printf %-Ns inside while-read" {
-  run run_lint "$FIXTURES/manual-padding/task-b"
+  run codebase lint:gum-table "$FIXTURES/manual-padding/task-b"
   [ "$status" -ne 0 ]
   [[ "$output" == *"[loop-table]"* ]]
   [[ "$output" == *"WARN"* ]]
 }
 
 @test "loop-table: detects printf in piped while loop" {
-  run run_lint "$FIXTURES/manual-padding/task-f"
+  run codebase lint:gum-table "$FIXTURES/manual-padding/task-f"
   [ "$status" -ne 0 ]
   [[ "$output" == *"[loop-table]"* ]]
 }
 
 @test "loop-table: detects printf in loop, header outside is INFO" {
-  run run_lint "$FIXTURES/manual-padding/task-e"
+  run codebase lint:gum-table "$FIXTURES/manual-padding/task-e"
   [ "$status" -ne 0 ]
   [[ "$output" == *"[loop-table]"* ]]
   [[ "$output" == *"[padding]"* ]]
@@ -54,7 +50,7 @@ run_lint() {
 # ============================================================================
 
 @test "padding: printf %-Ns outside loop is INFO, not a failure" {
-  run run_lint "$FIXTURES/manual-padding/task-a"
+  run codebase lint:gum-table "$FIXTURES/manual-padding/task-a"
   [ "$status" -eq 0 ]
   [[ "$output" == *"[padding]"* ]]
   [[ "$output" == *"INFO"* ]]
@@ -63,12 +59,12 @@ run_lint() {
 }
 
 @test "padding: status display with label alignment is INFO only" {
-  run run_lint "$FIXTURES/clean/task-status"
+  run codebase lint:gum-table "$FIXTURES/clean/task-status"
   [ "$status" -eq 0 ]
 }
 
 @test "padding: separator + header without loop is INFO only" {
-  run run_lint "$FIXTURES/manual-padding/task-d"
+  run codebase lint:gum-table "$FIXTURES/manual-padding/task-d"
   [ "$status" -eq 0 ]
   [[ "$output" == *"INFO"* ]]
 }
@@ -78,31 +74,31 @@ run_lint() {
 # ============================================================================
 
 @test "clean: already using gum table" {
-  run run_lint "$FIXTURES/clean/task-gum"
+  run codebase lint:gum-table "$FIXTURES/clean/task-gum"
   [ "$status" -eq 0 ]
   [[ "$output" == *"OK"* ]]
 }
 
 @test "clean: simple printf without padding" {
-  run run_lint "$FIXTURES/clean/task-simple"
+  run codebase lint:gum-table "$FIXTURES/clean/task-simple"
   [ "$status" -eq 0 ]
   [[ "$output" == *"OK"* ]]
 }
 
 @test "clean: padding pattern in a comment" {
-  run run_lint "$FIXTURES/clean/task-comment"
+  run codebase lint:gum-table "$FIXTURES/clean/task-comment"
   [ "$status" -eq 0 ]
   [[ "$output" == *"OK"* ]]
 }
 
 @test "clean: inline codebase:ignore suppresses hit" {
-  run run_lint "$FIXTURES/clean/task-ignored"
+  run codebase lint:gum-table "$FIXTURES/clean/task-ignored"
   [ "$status" -eq 0 ]
   [[ "$output" == *"OK"* ]]
 }
 
 @test "clean: padding pattern in a usage/help string" {
-  run run_lint "$FIXTURES/clean/task-string"
+  run codebase lint:gum-table "$FIXTURES/clean/task-string"
   [ "$status" -eq 0 ]
   [[ "$output" == *"OK"* ]]
 }
@@ -112,7 +108,7 @@ run_lint() {
 # ============================================================================
 
 @test "directory scan finds high-confidence hits" {
-  run run_lint "$FIXTURES/manual-padding"
+  run codebase lint:gum-table "$FIXTURES/manual-padding"
   [ "$status" -ne 0 ]
   # task-b (loop), task-c (column-t), task-e (loop) should WARN
   [[ "$output" == *"task-b"* ]]
@@ -121,7 +117,7 @@ run_lint() {
 }
 
 @test "clean directory passes entirely" {
-  run run_lint "$FIXTURES/clean"
+  run codebase lint:gum-table "$FIXTURES/clean"
   [ "$status" -eq 0 ]
 }
 
@@ -130,13 +126,13 @@ run_lint() {
 # ============================================================================
 
 @test "WARN output includes file path, category, and line number" {
-  run run_lint "$FIXTURES/manual-padding/task-b"
+  run codebase lint:gum-table "$FIXTURES/manual-padding/task-b"
   [ "$status" -ne 0 ]
   [[ "$output" =~ WARN.*task-b:\[loop-table\].*[0-9]+: ]]
 }
 
 @test "INFO output includes file path, category, and line number" {
-  run run_lint "$FIXTURES/manual-padding/task-a"
+  run codebase lint:gum-table "$FIXTURES/manual-padding/task-a"
   [[ "$output" =~ INFO.*task-a:\[padding\].*[0-9]+: ]]
 }
 
@@ -145,7 +141,7 @@ run_lint() {
 # ============================================================================
 
 @test "fails when target does not exist" {
-  run run_lint "/nonexistent"
+  run codebase lint:gum-table /nonexistent
   [ "$status" -ne 0 ]
   [[ "$output" == *"ERROR"* ]]
 }

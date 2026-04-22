@@ -9,7 +9,9 @@ set -euo pipefail
 
 PATTERN="${usage_pattern}"
 LANG="${usage_lang:-bash}"
-EXCLUDES="${usage_excludes:-}"
+# Note: the USAGE flag name is '--exclude', so mise exports 'usage_exclude'.
+# The arg-name '<excludes>' in the USAGE spec is only used in help text.
+EXCLUDES="${usage_exclude:-}"
 
 if [[ -z "$PATTERN" ]]; then
   echo "ERROR: --pattern is required" >&2
