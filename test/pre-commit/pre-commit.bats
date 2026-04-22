@@ -49,9 +49,50 @@ EOF
   grep -q "gum-table" "$REPO/.git/hooks/pre-commit.d/codebase"
 }
 
-@test "install: hook contains scope mappings" {
+@test "install: hook honors user scope overrides" {
+  # Override gum-table's default (.mise/tasks) with a non-default value.
+  # Verifies the user override is actually applied, not masked by the default.
+  cat > "$REPO/mise.toml" <<'EOF'
+[settings]
+quiet = true
+task_output = "interleave"
+
+[_.codebase]
+lint = ["mise-settings", "gum-table"]
+
+[_.codebase.scope]
+gum-table = "custom/gum-path"
+EOF
   codebase pre-commit
-  grep -q '.mise/tasks' "$REPO/.git/hooks/pre-commit.d/codebase"
+  grep -q 'custom/gum-path' "$REPO/.git/hooks/pre-commit.d/codebase"
+}
+
+@test "install: generated hook is syntactically valid bash" {
+  codebase pre-commit
+  bash -n "$REPO/.git/hooks/pre-commit.d/codebase"
+}
+
+@test "install: generated hook runs end-to-end against a clean repo" {
+  # Full smoke test: install the hook, actually execute it. Catches
+  # generation bugs the grep-based tests can't.
+  #
+  # Uses mise-settings (expects quiet=true + task_output="interleave"
+  # in the target's mise.toml) as the only lint rule; our fixture
+  # mise.toml satisfies it, so the hook should exit 0.
+  cat > "$REPO/mise.toml" <<'EOF'
+[settings]
+quiet = true
+task_output = "interleave"
+
+[_.codebase]
+lint = ["mise-settings"]
+EOF
+  codebase pre-commit
+
+  # Git always invokes hooks from the repo root. Simulate that —
+  # the hook reads REPO_ROOT via 'git rev-parse --show-toplevel'.
+  run bash -c "cd '$REPO' && bash '$REPO/.git/hooks/pre-commit.d/codebase'"
+  [ "$status" -eq 0 ]
 }
 
 @test "install: dispatcher is executable" {

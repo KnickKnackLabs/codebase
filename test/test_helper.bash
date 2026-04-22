@@ -13,7 +13,14 @@ fi
 
 # codebase() — call any codebase task through mise. Tests set CALLER_PWD
 # for tasks that need it (pre-commit resolves the target git repo from it).
+#
+# Notes:
+#   - We capture $PWD *before* the cd — otherwise the fallback would
+#     resolve against MISE_CONFIG_ROOT, not the caller's dir.
+#   - Runs in a subshell so the cd doesn't leak into later commands in
+#     the calling test. (bats tests are isolated, but defensive.)
 codebase() {
-  cd "$MISE_CONFIG_ROOT" && CALLER_PWD="${CALLER_PWD:-$PWD}" mise run -q "$@"
+  local caller="${CALLER_PWD:-$PWD}"
+  ( cd "$MISE_CONFIG_ROOT" && CALLER_PWD="$caller" mise run -q "$@" )
 }
 export -f codebase

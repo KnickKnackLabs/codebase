@@ -74,25 +74,27 @@ if [[ -z "$RULES" ]]; then
 fi
 
 # Read per-rule scope overrides from [_.codebase.scope].
-# Stored as 'rule:scope' lines (bash 3 compatible — no associative arrays).
+# Stored as 'rule<TAB>scope' lines (bash 3 compatible — no associative arrays).
+# Tab separator chosen because it can't appear in rule names or fs paths
+# read from TOML; ':' would truncate scopes with colons (legal in paths).
 USER_SCOPES=""
 while IFS='=' read -r rule scope; do
   [[ -z "$rule" ]] && continue
   rule=$(echo "$rule" | tr -d ' "')
   scope=$(echo "$scope" | tr -d ' "')
-  USER_SCOPES+="$rule:$scope"$'\n'
+  USER_SCOPES+="${rule}"$'\t'"${scope}"$'\n'
 done < <(awk '
   /^\[_\.codebase\.scope\]/ { in_section=1; next }
   /^\[/ { in_section=0 }
   in_section && /=/ { print }
 ' "$TOML")
 
-# Default scopes per rule (same 'rule:scope' format).
-DEFAULT_SCOPES=$'mise-settings:.\ngum-table:.mise/tasks\n'
+# Default scopes per rule (same 'rule<TAB>scope' format).
+DEFAULT_SCOPES=$'mise-settings\t.\ngum-table\t.mise/tasks\n'
 
 lookup_scope() {
   local map="$1" rule="$2"
-  printf '%s' "$map" | awk -F: -v r="$rule" '$1==r { print $2; exit }'
+  printf '%s' "$map" | awk -F'\t' -v r="$rule" '$1==r { print $2; exit }'
 }
 
 resolve_scope() {
@@ -105,9 +107,17 @@ resolve_scope() {
 }
 
 # --- Build scope case statement (baked at install time, bash 3 compatible) ---
+# Guard against scope strings with single quotes, which would break the
+# case body's quoting. Scopes are paths read from mise.toml; apostrophes
+# are vanishingly rare but easy to detect and reject cleanly.
 SCOPE_CASE=""
 for rule in $RULES; do
   scope=$(resolve_scope "$rule")
+  if [[ "$scope" == *"'"* ]]; then
+    echo "ERROR: scope for rule '$rule' contains a single quote: $scope" >&2
+    echo "  Single quotes in scopes break the generated hook. Remove or escape." >&2
+    exit 1
+  fi
   SCOPE_CASE+="    $rule) scope='$scope' ;;"$'\n'
 done
 
