@@ -1,0 +1,3 @@
+# codebase:ignore shellcheck
+[tools]
+shellcheck = "latest"
