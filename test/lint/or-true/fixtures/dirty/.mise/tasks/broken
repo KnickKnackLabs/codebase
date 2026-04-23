@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Seven non-comment lines below exercise the seven flagged patterns.
+# Raw '|| true' / '|| :' count across the whole file is higher (comments
+# in this block describe each pattern using '|| true' as documentation)
+# but comments are correctly skipped by the rule.
+
 # Canonical smell — '|| true'.
 mkdir -p /tmp/foo || true
 

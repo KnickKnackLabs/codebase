@@ -131,11 +131,31 @@ setup() {
 }
 
 @test "or-true: discovery prunes .git/ (hooks with '|| true' are ignored)" {
-  # Fixture contains .git/hooks/pre-commit with '|| true'. If the
-  # prune fails, the hook gets scanned and the target fails.
-  run codebase lint:or-true "$FIXTURES/git-dir"
+  # Regression: a committed fixture can't contain a real .git/ directory
+  # (git refuses). Build it inline. The hook contains '|| true' AND we
+  # plant a clean shell file at the top of the target — if the prune
+  # fails, the rule will flag the hook; if the walk silently skips
+  # everything, the clean file wouldn't be reported as scanned either.
+  local tmp
+  tmp=$(mktemp -d)
+  mkdir -p "$tmp/.git/hooks" "$tmp/.mise/tasks"
+  cat > "$tmp/.git/hooks/pre-commit" <<'EOF'
+#!/usr/bin/env bash
+# If the prune fails, this '|| true' will be flagged.
+echo pre-commit || true
+EOF
+  cat > "$tmp/.mise/tasks/greet" <<'EOF'
+#!/usr/bin/env bash
+echo hi
+EOF
+
+  run codebase lint:or-true "$tmp"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"OK"*"git-dir"* ]]
+  [[ "$output" == *"OK"* ]]
+  # One shell file scanned (the greet task), zero from .git— prove the
+  # walk did find files, so the pass isn't vacuous.
+  [[ "$output" == *"1 file(s) clean"* ]]
+  rm -rf "$tmp"
 }
 
 # ============================================================================

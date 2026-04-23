@@ -3,7 +3,7 @@
 #
 # Source into a task with:
 #   # shellcheck source=../../lib/shell-files.sh
-#   source "$MISE_PROJECT_ROOT/lib/shell-files.sh"
+#   source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
 
 # discover_shell_files <target>
 #

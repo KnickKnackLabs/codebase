@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # shellcheck source=../../../lib/shell-files.sh
-source "$MISE_PROJECT_ROOT/lib/shell-files.sh"
+source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
 
 # Rationale: '|| true' silently turns any non-zero exit into success,
 # erasing the signal about whether the failure was expected or not. The
@@ -81,7 +81,7 @@ for target in "${TARGETS[@]}"; do
 
   # File-level ignore via mise.toml
   toml="$target/mise.toml"
-  if [[ -f "$toml" ]] && head -20 "$toml" | grep -q 'codebase:ignore or-true'; then
+  if [[ -f "$toml" ]] && grep -m1 -q 'codebase:ignore or-true' "$toml"; then
     echo "SKIP  $name (codebase:ignore)"
     continue
   fi
