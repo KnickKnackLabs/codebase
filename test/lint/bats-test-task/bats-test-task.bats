@@ -56,6 +56,14 @@ setup() {
   [[ "$output" == *"2 'bats' invocations"* ]]
 }
 
+@test "bats-test-task: flags a task that never calls bats" {
+  # Coverage gap from PR #19 review (zeke nit #4). The 'no bats
+  # invocation found' diagnostic had no fixture exercising it.
+  run codebase lint:bats-test-task "$FIXTURES/missing-bats"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no 'bats' invocation found"* ]]
+}
+
 @test "bats-test-task: flags outer 'if \$#' wrapping bats" {
   run codebase lint:bats-test-task "$FIXTURES/if-dollar-hash"
   [ "$status" -ne 0 ]

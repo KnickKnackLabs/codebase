@@ -51,19 +51,24 @@ fi
 #
 # Signatures:
 #
-#   1. `bash "$…TASK…"`             — bash + var whose name contains TASK
-#   2. `bash "<path>/.mise/tasks/<name>"`  — bash + literal task path
-#   3. `run "<path>/.mise/tasks/<name>"`   — bats `run` + task path as cmd
-#   4. `run bash "$…TASK…"`         — bats `run` + bash + TASK var
-#   5. `run bash "<path>/.mise/tasks/…"`   — bats `run` + bash + task path
+#   1. `bash "$…TASK…"`                 — bash + var whose name contains TASK
+#   2. `(run )?bash <token>.mise/tasks/…`  — bash + path containing .mise/tasks/,
+#                                            quoted or unquoted, nested or flat
+#   3. `run <token>.mise/tasks/…`          — bats `run` + path as cmd, any shape
+#
+# The path-bearing regexes use `[^[:space:]]*\.mise/tasks/[A-Za-z0-9_/-]+`
+# to match both quoted and unquoted forms and both flat (`foo`) and nested
+# (`lint/foo`) task names — mise tasks routinely nest under subdirs
+# (`.mise/tasks/lint/mcr-scope`). The trailing charclass includes `/` so
+# nested paths are caught in full, not truncated at the first segment.
 #
 # The `run bash …` forms are covered by the bash patterns when
 # considered as a separate statement; we don't need separate regexes.
 # Stmt-boundary `[[:space:]]|^|[;&|(]` is expressed as a BRE-safe class.
 STMT_BOUNDARY='(^|[[:space:]]|[;&|(])'
 BASH_TASK_VAR_RE="${STMT_BOUNDARY}(run[[:space:]]+)?bash[[:space:]]+\"?\\\$\\{?[A-Z_]*TASK"
-BASH_TASK_PATH_RE="${STMT_BOUNDARY}(run[[:space:]]+)?bash[[:space:]]+\"[^\"]*/\\.mise/tasks/[A-Za-z0-9_-]+\""
-RUN_TASK_PATH_RE="${STMT_BOUNDARY}run[[:space:]]+\"[^\"]*/\\.mise/tasks/[A-Za-z0-9_-]+\""
+BASH_TASK_PATH_RE="${STMT_BOUNDARY}(run[[:space:]]+)?bash[[:space:]]+[^[:space:]]*\\.mise/tasks/[A-Za-z0-9_/-]+"
+RUN_TASK_PATH_RE="${STMT_BOUNDARY}run[[:space:]]+[^[:space:]]*\\.mise/tasks/[A-Za-z0-9_/-]+"
 
 # discover_test_files <target>
 #

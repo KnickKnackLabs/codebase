@@ -55,9 +55,18 @@ BATS_INVOKE_RE='^[[:space:]]*(exec[[:space:]]+)?bats[[:space:]]'
 # `fi`. Returns 1 otherwise.
 #
 # Implemented in awk because regex can't express "bats appears between an
-# if-on-$# and its matching fi." Single if/fi nesting tracker — nested ifs
-# that don't themselves mention $# still count toward depth so we close
-# properly.
+# if-on-$# and its matching fi." Single if/fi nesting tracker — nested
+# `if`s that don't themselves mention $# still count toward depth so we
+# close properly. `elif` is intentionally NOT counted (it doesn't add a
+# nesting level, so the existing `fi` will close the block correctly).
+#
+# Known limitation: one-line forms like `if [ $# -gt 0 ]; then bats "$@"; fi`
+# aren't detected — `next` after the opening `if` skips the rest of the
+# line, so we never see the `bats` or the `fi`. The block stays open for
+# the rest of the file but harmlessly, since depth never reaches 0 without
+# a real `fi` on its own line. This form is vanishingly rare in practice
+# (every existing KKL test task uses the multi-line shape); the false
+# negative is the accepted trade-off.
 check_if_dollar_hash() {
   local file="$1"
   awk '
@@ -78,6 +87,8 @@ check_if_dollar_hash() {
     }
     # Inside the tracked block, note any real `bats` invocation.
     # (Line-start form rules out `*.bats` globs inside the body.)
+    # `elif` lines fall through here — they do not match the `if` rule
+    # above and do not add depth, which is the intended behavior.
     in_if && /^[[:space:]]*(exec[[:space:]]+)?bats[[:space:]]/ { has_bats=1 }
     END { exit hit ? 0 : 1 }
   ' "$file"

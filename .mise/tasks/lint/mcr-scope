@@ -119,7 +119,7 @@ for target in "${TARGETS[@]}"; do
 
   # File-level ignore via mise.toml
   toml="$target/mise.toml"
-  if [[ -f "$toml" ]] && grep -m1 -q 'codebase:ignore mcr-scope' "$toml"; then
+  if [[ -f "$toml" ]] && rg -q 'codebase:ignore mcr-scope' "$toml"; then
     echo "SKIP  $name (codebase:ignore)"
     continue
   fi

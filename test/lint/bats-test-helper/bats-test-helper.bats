@@ -59,6 +59,31 @@ setup() {
   [[ "$output" == *'run bash'*'"$TASK"'* ]]
 }
 
+@test "bats-test-helper: flags nested '.mise/tasks/lint/<name>' paths (regression — PR #19 review)" {
+  # Regression guard from PR #19 review (ikma + zeke, independently).
+  # The original BASH_TASK_PATH_RE / RUN_TASK_PATH_RE used
+  # [A-Za-z0-9_-]+ after '.mise/tasks/', which didn't match '/' — so
+  # nested tasks like '.mise/tasks/lint/check' escaped both regexes.
+  # Fix: [A-Za-z0-9_/-]+ in the trailing charclass.
+  run codebase lint:bats-test-helper "$FIXTURES/dirty-nested-path"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"FAIL"*"dirty-nested-path"* ]]
+  [[ "$output" == *".mise/tasks/lint/check"* ]]
+  [[ "$output" == *".mise/tasks/lint/mcr-scope"* ]]
+}
+
+@test "bats-test-helper: flags unquoted forms (regression — PR #19 review)" {
+  # Regression guard from PR #19 review (zeke).
+  # The original path regexes required a leading '"' so forms like
+  # 'run \$VAR/.mise/tasks/foo' (unquoted) escaped. Fix: drop the leading
+  # '"' anchor and match the whole non-whitespace token instead.
+  run codebase lint:bats-test-helper "$FIXTURES/dirty-unquoted"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"FAIL"*"dirty-unquoted"* ]]
+  [[ "$output" == *"run \$REPO_DIR/.mise/tasks/foo"* ]]
+  [[ "$output" == *"bash \$REPO_DIR/.mise/tasks/lint/check"* ]]
+}
+
 # ============================================================================
 # False positives — none of these are actual invocations
 # ============================================================================

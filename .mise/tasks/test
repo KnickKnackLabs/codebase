@@ -32,7 +32,7 @@ if ! $has_target; then
   # `args+=("--recursive" "$TEST_DIR/")` from the canonical.
   while IFS= read -r f; do
     args+=("$f")
-  done < <(fd -t f -e bats --exclude fixtures . "$TEST_DIR" | sort)
+  done < <(fd -t f -e bats --exclude fixtures . "$TEST_DIR" | LC_ALL=C sort)
 fi
 
 bats "${args[@]}"
