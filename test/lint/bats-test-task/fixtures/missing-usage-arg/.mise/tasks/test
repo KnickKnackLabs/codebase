@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Run BATS tests"
+#USAGE example "mise run test"
+set -euo pipefail
+
+bats "$MISE_CONFIG_ROOT/test/"
