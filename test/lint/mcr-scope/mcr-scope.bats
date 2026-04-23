@@ -45,12 +45,30 @@ setup() {
   [[ "$output" == *"lib/util.sh"* ]]
 }
 
-@test "mcr-scope: flags brace-form references" {
+@test "mcr-scope: flags brace-form references (all bash expansion operators)" {
   run codebase lint:mcr-scope "$FIXTURES/brace-form"
   [ "$status" -ne 0 ]
   [[ "$output" == *"FAIL"* ]]
-  # Three distinct brace-form hits in helpers.bash
-  [[ "$output" == *"3 "* ]]
+  # Six distinct brace-form hits: ${MCR:-}, ${MCR}, ${MCR:+},
+  # ${MCR%}, ${MCR#}, ${MCR/}.
+  [[ "$output" == *"6 "* ]]
+}
+
+@test "mcr-scope: does NOT flag MCR in full-line comments" {
+  run codebase lint:mcr-scope "$FIXTURES/comment-only"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK"* ]]
+}
+
+@test "test_helper: REPO_DIR resolves to the repo root (regression — #17 bug)" {
+  # Regression guard: the original dogfood used $BATS_TEST_DIRNAME, which
+  # inside a loaded helper is the calling .bats file's dir, not the
+  # helper's. Tests appeared to pass but REPO_DIR silently held the wrong
+  # value. Use ${BASH_SOURCE[0]} to self-locate test_helper.bash.
+  # If this test breaks, the fix regressed — see test/test_helper.bash.
+  [ -f "$REPO_DIR/mise.toml" ]
+  [ -d "$REPO_DIR/.mise/tasks" ]
+  [ -f "$REPO_DIR/.mise/tasks/test" ]
 }
 
 @test "mcr-scope: flags extension-less bash files under lib/ via shebang" {

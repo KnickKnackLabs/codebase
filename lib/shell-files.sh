@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # Shared helpers for codebase tasks.
 #
-# Source into a task with:
+# Source from .mise/tasks/* (task context):
 #   # shellcheck source=../../lib/shell-files.sh
 #   source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
+#
+# MISE_CONFIG_ROOT is the right primitive here — mise dispatched the task, so
+# it's set correctly. Do NOT source this file from test helpers or other lib
+# files using $MISE_CONFIG_ROOT; see fold/notes/mise-gotchas.md. From a lib
+# or test-helper context, self-locate via ${BASH_SOURCE[0]} instead.
 
 # discover_shell_files <target>
 #

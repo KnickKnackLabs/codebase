@@ -35,12 +35,15 @@ fi
 # Patterns — checked independently so we can name the shape in output.
 #
 #   $MISE_CONFIG_ROOT           — bare form
-#   ${MISE_CONFIG_ROOT}         — brace form (and ${MISE_CONFIG_ROOT:-default}, :+, etc.)
+#   ${MISE_CONFIG_ROOT}         — brace form: covers ${MCR}, ${MCR:-default},
+#                                ${MCR:+alt}, ${MCR%/...}, ${MCR#...},
+#                                ${MCR/old/new}, and bare ${MCR} itself.
 #
-# Terminator after the name prevents matches against speculative vars
-# like $MISE_CONFIG_ROOT_FOO (no such var exists today; hermetic).
+# Terminator after the name uses [^A-Za-z0-9_] to reject speculative vars
+# like $MISE_CONFIG_ROOT_FOO while matching any bash parameter-expansion
+# operator (`}`, `:`, `%`, `#`, `/`, `+`, `?`, `-`, etc.) in one shot.
 BARE_RE='\$MISE_CONFIG_ROOT([^A-Za-z0-9_]|$)'
-BRACE_RE='\$\{MISE_CONFIG_ROOT[}:+?-]'
+BRACE_RE='\$\{MISE_CONFIG_ROOT[^A-Za-z0-9_]'
 
 # discover_test_lib_files <target>
 #
