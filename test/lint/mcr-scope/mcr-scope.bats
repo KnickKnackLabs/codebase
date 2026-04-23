@@ -77,6 +77,17 @@ setup() {
   [[ "$output" == *"lib/helper"* ]]
 }
 
+@test "mcr-scope: does NOT scan */fixtures/* (lint-rule synthetic inputs)" {
+  # Regression guard: lint-rule fixtures intentionally contain MCR refs as
+  # negative cases. Scanning them would produce self-flagging meta-
+  # recursion. The outer 'test/real-helper.bash' is clean; the nested
+  # '*/fixtures/*' paths contain MCR and must be skipped.
+  run codebase lint:mcr-scope "$FIXTURES/nested-fixtures"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK"* ]]
+  [[ "$output" != *"FAIL"* ]]
+}
+
 @test "mcr-scope: does NOT scan .mise/tasks/* (task context is fine)" {
   # no-test-lib has MCR in a task script, which is legitimate.
   run codebase lint:mcr-scope "$FIXTURES/no-test-lib"

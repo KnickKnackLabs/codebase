@@ -51,25 +51,34 @@ BRACE_RE='\$\{MISE_CONFIG_ROOT[^A-Za-z0-9_]'
 #   - <target>/test/**         (any .bats or .bash file — helpers + tests)
 #   - <target>/lib/**          (any .sh or .bash file)
 #   - <target>/lib/**          (extension-less files with a bash/sh shebang)
+#
+# Excludes '*/fixtures/*' paths: lint-rule fixtures (including this rule's
+# own) intentionally contain MCR references as negative cases. Scanning
+# them would produce self-flagging meta-recursion. Real tests don't live
+# under 'fixtures/' by convention.
 discover_test_lib_files() {
   local target="$1"
 
+  # '--exclude fixtures' scopes to path components named 'fixtures', not
+  # substring matches. This is important because '$target' itself often
+  # lives under a 'fixtures/' path (any lint-rule's own fixtures dir),
+  # but we only want to skip 'fixtures/' *inside* the target's test/lib
+  # trees — which is exactly the component-match semantic.
   if [[ -d "$target/test" ]]; then
-    find "$target/test" \
-      -type f \( -name "*.bats" -o -name "*.bash" -o -name "*.sh" \) 2>/dev/null
+    fd -t f -e bats -e bash -e sh --exclude fixtures . "$target/test"
   fi
 
   if [[ -d "$target/lib" ]]; then
-    find "$target/lib" \
-      -type f \( -name "*.sh" -o -name "*.bash" \) 2>/dev/null
+    fd -t f -e sh -e bash --exclude fixtures . "$target/lib"
 
-    # Extension-less files with a bash/sh shebang under lib/
-    find "$target/lib" -type f ! -name "*.*" 2>/dev/null |
-      while IFS= read -r f; do
-        if head -1 "$f" 2>/dev/null | grep -qE '^#!.*\b(bash|sh)\b'; then
-          echo "$f"
-        fi
-      done
+    # Extension-less files with a bash/sh shebang under lib/. fd's -e is
+    # extension-based, so we filter extension-less separately via -t f
+    # with a pattern that matches only names without dots.
+    while IFS= read -r f; do
+      if head -1 "$f" 2>/dev/null | rg -q '^#!.*\b(bash|sh)\b'; then
+        echo "$f"
+      fi
+    done < <(fd -t f --exclude fixtures '^[^.]+$' "$target/lib")
   fi
 }
 
