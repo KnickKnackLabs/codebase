@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# No mise.toml in this fixture — proves the rule runs without one.
+echo "hi"

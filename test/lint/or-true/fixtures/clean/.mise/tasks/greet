@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# No '|| true' or '|| :' here — this file is clean.
+if ! output=$(date -u 2>&1); then
+  echo "date failed: $output" >&2
+  exit 1
+fi
+
+echo "hello $USER"

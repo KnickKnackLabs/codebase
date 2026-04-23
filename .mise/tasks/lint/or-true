@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+#MISE description="Flag '|| true' (and '|| :') as an error-swallowing code smell"
+#USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/shell-files.sh
+source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
+
+# Rationale: '|| true' silently turns any non-zero exit into success,
+# erasing the signal about whether the failure was expected or not. The
+# canonical replacement is an explicit 'if !' form:
+#
+#     # Bad  — intent unclear
+#     result=$(some_command 2>&1) || true
+#
+#     # Good — "I know this may fail, and here's how I handle it"
+#     if ! result=$(some_command 2>&1); then
+#       :  # non-zero expected — result is parsed below
+#     fi
+#
+# Legitimate uses (grep -c counting no matches, pipeline components) can
+# opt out with an inline '# codebase:ignore' comment on the offending
+# line, or a whole-file opt-out via 'codebase:ignore or-true' in the
+# target's mise.toml.
+
+IFS=' ' read -ra TARGETS <<< "${usage_targets}"
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+  echo "ERROR: at least one target is required" >&2
+  exit 1
+fi
+
+# Patterns (checked independently so we can name them in output):
+#   '|| true'  — explicit error-suppression
+#   '|| :'     — POSIX-shorthand equivalent (no-op builtin)
+#   '||:'      — unspaced variant of the above
+#
+# Terminator char-class covers every place a statement can end inside
+# bash: whitespace, EOL, ';', '&' ('&&' too), '|' (pipe / '||'), closing
+# brackets ')' '}' (command-substitutions, subshells, groupings), and
+# the redirection operators '>' and '<'. Without ')', we'd miss hits
+# like 'foo=$(cmd || true)' — a common fallback-assignment shape. Without
+# '><' we'd miss 'cmd || true>file' and the '|| :>/dev/null' truncation
+# trick.
+TERM='([[:space:]]|$|[;&|)}><])'
+OR_TRUE_RE="\|\|[[:space:]]+true${TERM}"
+OR_COLON_RE="\|\|[[:space:]]*:${TERM}"
+
+scan_file() {
+  local file="$1"
+  local lineno=0
+  local line
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    lineno=$((lineno + 1))
+
+    # Skip full-line comments.
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+
+    # Inline opt-out.
+    [[ "$line" == *"codebase:ignore"* ]] && continue
+
+    if [[ "$line" =~ $OR_TRUE_RE ]] || [[ "$line" =~ $OR_COLON_RE ]]; then
+      # Trim leading whitespace from the reported line for readability.
+      local trimmed="${line#"${line%%[![:space:]]*}"}"
+      echo "$lineno: $trimmed"
+    fi
+  done < "$file"
+}
+
+failures=0
+
+for target in "${TARGETS[@]}"; do
+  if [[ ! -e "$target" ]]; then
+    echo "ERROR: target does not exist: $target" >&2
+    exit 1
+  fi
+
+  name=$(basename "$target")
+
+  # File-level ignore via mise.toml
+  toml="$target/mise.toml"
+  if [[ -f "$toml" ]] && grep -m1 -q 'codebase:ignore or-true' "$toml"; then
+    echo "SKIP  $name (codebase:ignore)"
+    continue
+  fi
+
+  # Collect shell files
+  files=()
+  while IFS= read -r f; do
+    [[ -n "$f" ]] && files+=("$f")
+  done < <(discover_shell_files "$target")
+
+  if [[ ${#files[@]} -eq 0 ]]; then
+    echo "OK    $name (no shell files found)"
+    continue
+  fi
+
+  # Scan each file; collect hits
+  hit_count=0
+  target_output=""
+  for file in "${files[@]}"; do
+    rel="${file#"$target"/}"
+    while IFS= read -r hit; do
+      [[ -z "$hit" ]] && continue
+      target_output+="  $rel:$hit"$'\n'
+      hit_count=$((hit_count + 1))
+    done < <(scan_file "$file")
+  done
+
+  if [[ "$hit_count" -gt 0 ]]; then
+    echo "FAIL  $name: $hit_count occurrence(s) of '|| true' or '|| :'"
+    printf '%s' "$target_output"
+    echo "  hint: prefer 'if ! cmd; then ...; fi' — or annotate the line with '# codebase:ignore'"
+    failures=$((failures + 1))
+  else
+    echo "OK    $name (${#files[@]} file(s) clean)"
+  fi
+done
+
+exit "$failures"

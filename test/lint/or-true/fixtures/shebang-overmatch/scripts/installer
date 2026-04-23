@@ -1,0 +1,6 @@
+#!/usr/bin/env fish
+# Pre-regression-fix, 'sh' matched as a suffix of 'fish' and this file
+# was treated as a shell script. It contains a '|| true' that would
+# have been flagged. After the fix, discover_shell_files must not
+# emit this file and the rule must pass.
+echo "hello" || true

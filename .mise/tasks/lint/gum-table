@@ -4,23 +4,15 @@
 
 set -euo pipefail
 
+# shellcheck source=../../../lib/shell-files.sh
+source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
+
 IFS=' ' read -ra TARGETS <<< "${usage_targets}"
 
 if [[ ${#TARGETS[@]} -eq 0 ]]; then
   echo "ERROR: at least one target is required" >&2
   exit 1
 fi
-
-# Find bash task files
-find_bash_tasks() {
-  local target="$1"
-  find "$target" -type f \( -name "*.sh" -o -name "*.bash" \) 2>/dev/null
-  find "$target" -type f ! -name "*.*" 2>/dev/null | while read -r f; do
-    if head -1 "$f" 2>/dev/null | grep -q '#!/usr/bin/env bash\|#!/bin/bash'; then
-      echo "$f"
-    fi
-  done
-}
 
 # Scan a single file. Single-pass: track loop depth as we go,
 # classify hits inline. Emits hits on stdout, one per line.
@@ -109,7 +101,7 @@ for target in "${TARGETS[@]}"; do
         failures=$((failures + 1))
       fi
     fi
-  done < <(find_bash_tasks "$target")
+  done < <(discover_shell_files "$target")
 done
 
 if [[ "$failures" -eq 0 ]]; then

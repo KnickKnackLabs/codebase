@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Whole file is intentionally ignored via mise.toml.
+mkdir -p /tmp/foo || true
+rm /tmp/nope || :

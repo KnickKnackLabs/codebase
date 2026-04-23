@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Seven non-comment lines below exercise the seven flagged patterns.
+# Raw '|| true' / '|| :' count across the whole file is higher (comments
+# in this block describe each pattern using '|| true' as documentation)
+# but comments are correctly skipped by the rule.
+
+# Canonical smell — '|| true'.
+mkdir -p /tmp/foo || true
+
+# POSIX-shorthand equivalent — '|| :'.
+rm /tmp/nope || :
+
+# Unspaced variant.
+mv /tmp/a /tmp/b ||:
+
+# Inside a command substitution — terminated by ')', not by whitespace.
+out=$(cat /tmp/maybe 2>/dev/null || true)
+
+# Piped after a '|| true' — terminator is '|'.
+stat /tmp/x || true | head -1
+
+# Redirect terminator — 'cmd || true>file' is valid shell.
+false || true>/tmp/discarded
+
+# Colon-truncation trick — '|| :>file' is a legitimate but
+# still-smelly way to empty a file on the failure path.
+false || :>/tmp/emptied
