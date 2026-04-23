@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+#MISE description="Forbid MISE_CONFIG_ROOT in test/ and lib/ (use BATS_TEST_DIRNAME or BASH_SOURCE instead)"
+#USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+
+set -euo pipefail
+
+# Rationale: $MISE_CONFIG_ROOT is a *task-execution* primitive. In test
+# helpers and library files it's unreliable — agent sessions are
+# themselves spawned from a mise task (e.g. `shimmer agent`), so MCR is
+# already set to the launcher's repo and persists. A direct
+# `bats test/foo.bats` or `source lib/foo.sh` inherits that wrong value.
+#
+# Context-appropriate primitives:
+#
+#   .mise/tasks/*  →  $MISE_CONFIG_ROOT     (mise dispatched the task; safe)
+#   lib/*.sh       →  "${BASH_SOURCE[0]}"   (self-locating)
+#   test/*         →  $BATS_TEST_DIRNAME    (bats sets this from the file path)
+#
+# Legitimate exceptions can opt out with an inline `# codebase:ignore`
+# comment or a whole-file opt-out via `codebase:ignore mcr-scope` in the
+# target's mise.toml. None are known in our codebases at the time this
+# rule was written.
+#
+# See: fold/notes/mise-gotchas.md ("$MISE_CONFIG_ROOT persists across
+# tool boundaries in agent sessions") and den/notes/
+# three-primitives-three-contexts.md for the mechanism.
+
+IFS=' ' read -ra TARGETS <<< "${usage_targets}"
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+  echo "ERROR: at least one target is required" >&2
+  exit 1
+fi
+
+# Patterns — checked independently so we can name the shape in output.
+#
+#   $MISE_CONFIG_ROOT           — bare form
+#   ${MISE_CONFIG_ROOT}         — brace form (and ${MISE_CONFIG_ROOT:-default}, :+, etc.)
+#
+# Terminator after the name prevents matches against speculative vars
+# like $MISE_CONFIG_ROOT_FOO (no such var exists today; hermetic).
+BARE_RE='\$MISE_CONFIG_ROOT([^A-Za-z0-9_]|$)'
+BRACE_RE='\$\{MISE_CONFIG_ROOT[}:+?-]'
+
+# discover_test_lib_files <target>
+#
+# Emit paths of files where $MISE_CONFIG_ROOT is forbidden:
+#   - <target>/test/**         (any .bats or .bash file — helpers + tests)
+#   - <target>/lib/**          (any .sh or .bash file)
+#   - <target>/lib/**          (extension-less files with a bash/sh shebang)
+discover_test_lib_files() {
+  local target="$1"
+
+  if [[ -d "$target/test" ]]; then
+    find "$target/test" \
+      -type f \( -name "*.bats" -o -name "*.bash" -o -name "*.sh" \) 2>/dev/null
+  fi
+
+  if [[ -d "$target/lib" ]]; then
+    find "$target/lib" \
+      -type f \( -name "*.sh" -o -name "*.bash" \) 2>/dev/null
+
+    # Extension-less files with a bash/sh shebang under lib/
+    find "$target/lib" -type f ! -name "*.*" 2>/dev/null |
+      while IFS= read -r f; do
+        if head -1 "$f" 2>/dev/null | grep -qE '^#!.*\b(bash|sh)\b'; then
+          echo "$f"
+        fi
+      done
+  fi
+}
+
+scan_file() {
+  local file="$1"
+  local lineno=0
+  local line
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    lineno=$((lineno + 1))
+
+    # Skip full-line comments. We deliberately do NOT attempt to strip
+    # inline comments — doing so correctly requires string-literal and
+    # escape awareness, and the false-positive cost (a comment like
+    # "# $MISE_CONFIG_ROOT was set here" on a line also containing code)
+    # is both rare and easy to silence with `# codebase:ignore`.
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+
+    # Inline opt-out.
+    [[ "$line" == *"codebase:ignore"* ]] && continue
+
+    if [[ "$line" =~ $BARE_RE ]] || [[ "$line" =~ $BRACE_RE ]]; then
+      local trimmed="${line#"${line%%[![:space:]]*}"}"
+      echo "$lineno: $trimmed"
+    fi
+  done < "$file"
+}
+
+failures=0
+
+for target in "${TARGETS[@]}"; do
+  if [[ ! -e "$target" ]]; then
+    echo "ERROR: target does not exist: $target" >&2
+    exit 1
+  fi
+
+  name=$(basename "$target")
+
+  # File-level ignore via mise.toml
+  toml="$target/mise.toml"
+  if [[ -f "$toml" ]] && grep -m1 -q 'codebase:ignore mcr-scope' "$toml"; then
+    echo "SKIP  $name (codebase:ignore)"
+    continue
+  fi
+
+  files=()
+  while IFS= read -r f; do
+    [[ -n "$f" ]] && files+=("$f")
+  done < <(discover_test_lib_files "$target")
+
+  if [[ ${#files[@]} -eq 0 ]]; then
+    echo "OK    $name (no test/ or lib/ files found)"
+    continue
+  fi
+
+  hit_count=0
+  target_output=""
+  for file in "${files[@]}"; do
+    rel="${file#"$target"/}"
+    while IFS= read -r hit; do
+      [[ -z "$hit" ]] && continue
+      target_output+="  $rel:$hit"$'\n'
+      hit_count=$((hit_count + 1))
+    done < <(scan_file "$file")
+  done
+
+  if [[ "$hit_count" -gt 0 ]]; then
+    echo "FAIL  $name: $hit_count \$MISE_CONFIG_ROOT reference(s) in test/ or lib/"
+    printf '%s' "$target_output"
+    echo "  hint: test/* → use \$BATS_TEST_DIRNAME; lib/* → use \${BASH_SOURCE[0]}-relative paths"
+    echo "        see fold/notes/mise-gotchas.md for the mechanism, or annotate with '# codebase:ignore'"
+    failures=$((failures + 1))
+  else
+    echo "OK    $name (${#files[@]} file(s) clean)"
+  fi
+done
+
+exit "$failures"

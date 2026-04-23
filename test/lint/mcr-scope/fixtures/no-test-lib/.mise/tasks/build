@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Task-level MCR use is fine — not scanned.
+set -euo pipefail
+echo "$MISE_CONFIG_ROOT"
