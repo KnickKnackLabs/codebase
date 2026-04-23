@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Run BATS tests"
+#USAGE arg "[args]..." var=#true help="Test suites or bats arguments"
+set -euo pipefail
+
+bats "$MISE_CONFIG_ROOT/test/"

@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+#MISE description="Flag direct invocation of .mise/tasks/* scripts from BATS tests (call the tool, not the script)"
+#USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+
+set -euo pipefail
+
+# Rationale: tests that invoke `.mise/tasks/*` scripts directly bypass
+# mise's USAGE parser, CALLER_PWD plumbing, flag parsing, and `[env]`
+# loading — and then have to fake all of that with exported `usage_*`
+# vars. This hides real bugs. The canonical pattern is a wrapper
+# function in `test_helper.bash` that calls the tool through
+# `mise run -q`, so tests read like real usage.
+#
+#   # Bad — bypasses mise
+#   run "$REPO_DIR/.mise/tasks/list" --json
+#   bash "$TASK"
+#   run bash "$REPO_DIR/.mise/tasks/foo"
+#
+#   # Good — goes through the real execution path
+#   notes() { ( cd "$REPO_DIR" && mise run -q "$@" ); }
+#   run notes list --json
+#
+# See fold/notes/bats-tool-testing.md ("Call the Tool, Not the Script")
+# for the full write-up.
+#
+# Legitimate exceptions — a test that deliberately exercises the raw
+# script contents (e.g., asserting on the file with `grep`, generating
+# a fixture task with `cat > "$fake/.mise/tasks/x"`) — are allowed
+# because they don't *invoke* the task; they just read or write the
+# file. The patterns below specifically match invocation forms.
+#
+# For rare true exceptions (a test that must bypass mise for a reason),
+# annotate the line with `# codebase:ignore` or the whole target via
+# `codebase:ignore bats-test-helper` in mise.toml.
+
+IFS=' ' read -ra TARGETS <<< "${usage_targets}"
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+  echo "ERROR: at least one target is required" >&2
+  exit 1
+fi
+
+# Invocation signatures we flag. All three must appear at the start of
+# a statement — either at line start (after whitespace) or after a
+# statement separator (`;`, `&&`, `||`, `|`, `(`). This rules out the
+# common false positives:
+#
+#   grep -q 'foo' "$MCR/.mise/tasks/bar"     # reading, not invoking
+#   cat > "$fake/.mise/tasks/task" <<EOF     # writing a fixture
+#   run codebase scan -e '.mise/tasks/ci/*'  # path-as-data in an arg
+#
+# Signatures:
+#
+#   1. `bash "$…TASK…"`                 — bash + var whose name contains TASK
+#   2. `(run )?bash <token>.mise/tasks/…`  — bash + path containing .mise/tasks/,
+#                                            quoted or unquoted, nested or flat
+#   3. `run <token>.mise/tasks/…`          — bats `run` + path as cmd, any shape
+#
+# The path-bearing regexes use `[^[:space:]]*\.mise/tasks/[A-Za-z0-9_/-]+`
+# to match both quoted and unquoted forms and both flat (`foo`) and nested
+# (`lint/foo`) task names — mise tasks routinely nest under subdirs
+# (`.mise/tasks/lint/mcr-scope`). The trailing charclass includes `/` so
+# nested paths are caught in full, not truncated at the first segment.
+#
+# The `run bash …` forms are covered by the bash patterns when
+# considered as a separate statement; we don't need separate regexes.
+# Stmt-boundary `[[:space:]]|^|[;&|(]` is expressed as a BRE-safe class.
+STMT_BOUNDARY='(^|[[:space:]]|[;&|(])'
+BASH_TASK_VAR_RE="${STMT_BOUNDARY}(run[[:space:]]+)?bash[[:space:]]+\"?\\\$\\{?[A-Z_]*TASK"
+BASH_TASK_PATH_RE="${STMT_BOUNDARY}(run[[:space:]]+)?bash[[:space:]]+[^[:space:]]*\\.mise/tasks/[A-Za-z0-9_/-]+"
+RUN_TASK_PATH_RE="${STMT_BOUNDARY}run[[:space:]]+[^[:space:]]*\\.mise/tasks/[A-Za-z0-9_/-]+"
+
+# discover_test_files <target>
+#
+# Emit paths of every file we want to scan under <target>/test:
+#   - *.bats   (test files)
+#   - *.bash   (helpers — test_helper.bash, setup_suite.bash, topic helpers)
+#
+# Excludes '*/fixtures/*' paths: lint-rule fixtures (including this rule's
+# own) intentionally contain direct-invocation anti-patterns as negative
+# cases. Scanning them would produce infinite meta-recursion. Real tests
+# don't live under 'fixtures/' by convention.
+discover_test_files() {
+  local target="$1"
+
+  # '--exclude fixtures' matches path components named 'fixtures', not
+  # substring. This matters because '$target' often lives under a
+  # 'fixtures/' path (this rule's own fixtures dir, in the self-test
+  # suite), and we only want to skip 'fixtures/' *inside* the target's
+  # test tree — which is exactly the component-match semantic.
+  if [[ -d "$target/test" ]]; then
+    fd -t f -e bats -e bash --exclude fixtures . "$target/test"
+  fi
+}
+
+scan_file() {
+  local file="$1"
+  local lineno=0
+  local line
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    lineno=$((lineno + 1))
+
+    # Skip full-line comments.
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+
+    # Inline opt-out.
+    [[ "$line" == *"codebase:ignore"* ]] && continue
+
+    if [[ "$line" =~ $BASH_TASK_VAR_RE ]] \
+      || [[ "$line" =~ $BASH_TASK_PATH_RE ]] \
+      || [[ "$line" =~ $RUN_TASK_PATH_RE ]]; then
+      local trimmed="${line#"${line%%[![:space:]]*}"}"
+      echo "$lineno: $trimmed"
+    fi
+  done < "$file"
+}
+
+failures=0
+
+for target in "${TARGETS[@]}"; do
+  if [[ ! -e "$target" ]]; then
+    echo "ERROR: target does not exist: $target" >&2
+    exit 1
+  fi
+
+  name=$(basename "$target")
+
+  # File-level ignore via mise.toml
+  toml="$target/mise.toml"
+  if [[ -f "$toml" ]] && rg -q 'codebase:ignore bats-test-helper' "$toml"; then
+    echo "SKIP  $name (codebase:ignore)"
+    continue
+  fi
+
+  files=()
+  while IFS= read -r f; do
+    [[ -n "$f" ]] && files+=("$f")
+  done < <(discover_test_files "$target")
+
+  if [[ ${#files[@]} -eq 0 ]]; then
+    echo "OK    $name (no test/ files found)"
+    continue
+  fi
+
+  hit_count=0
+  target_output=""
+  for file in "${files[@]}"; do
+    rel="${file#"$target"/}"
+    while IFS= read -r hit; do
+      [[ -z "$hit" ]] && continue
+      target_output+="  $rel:$hit"$'\n'
+      hit_count=$((hit_count + 1))
+    done < <(scan_file "$file")
+  done
+
+  if [[ "$hit_count" -gt 0 ]]; then
+    echo "FAIL  $name: $hit_count direct task-script invocation(s) in test/"
+    printf '%s' "$target_output"
+    echo "  hint: define a wrapper in test_helper.bash that calls 'mise run -q' —"
+    echo "        see fold/notes/bats-tool-testing.md ('Call the Tool, Not the Script')"
+    failures=$((failures + 1))
+  else
+    echo "OK    $name (${#files[@]} file(s) clean)"
+  fi
+done
+
+exit "$failures"

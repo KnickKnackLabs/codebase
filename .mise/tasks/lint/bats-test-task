@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+#MISE description="Enforce the canonical BATS test-task shape in .mise/tasks/test"
+#USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+
+set -euo pipefail
+
+# Rationale: BATS test tasks should (a) declare their variadic usage so
+# `mise run test <suite>` / `mise run test -- --filter pat` Just Work,
+# (b) show examples so invocation is discoverable via `--help`, and
+# (c) use the flattened for-loop pattern rather than an outer
+# `if [[ $# -gt 0 ]]; then ... else ... fi`.
+#
+# The canonical shape (used by shiv, vfox-shiv, blobs, testicles, shimmer):
+#
+#   #!/usr/bin/env bash
+#   #MISE description="Run BATS tests"
+#   #USAGE arg "[args]..." var=#true help="..."
+#   #USAGE example "..."
+#   set -euo pipefail
+#
+#   TEST_DIR="$MISE_CONFIG_ROOT/test"
+#   args=()
+#   has_target=false
+#   for arg in "$@"; do
+#     …
+#   done
+#   if ! $has_target; then
+#     args+=("$TEST_DIR/")        # or --recursive + dir for shimmer variant
+#   fi
+#   bats "${args[@]}"
+#
+# See fold/notes/bats-tool-testing.md ("The test task") for the full
+# write-up and rationale.
+#
+# Legitimate exceptions opt out via `codebase:ignore bats-test-task` in
+# the target's mise.toml.
+
+IFS=' ' read -ra TARGETS <<< "${usage_targets}"
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+  echo "ERROR: at least one target is required" >&2
+  exit 1
+fi
+
+# A real `bats` invocation starts a line (possibly preceded by whitespace
+# and an optional `exec`). This rules out `*.bats` globs, `-name "*.bats"`,
+# `[[ "$arg" == *.bats ]]`, and other pattern-matching uses of `.bats` as
+# an extension — which appear heavily inside the canonical for-loop.
+BATS_INVOKE_RE='^[[:space:]]*(exec[[:space:]]+)?bats[[:space:]]'
+
+# check_if_dollar_hash <file>
+#
+# Returns 0 if the file contains an `if [[ $# ... ]]` (or `if [ $# ... ]`)
+# block that transitively contains a `bats` invocation before its matching
+# `fi`. Returns 1 otherwise.
+#
+# Implemented in awk because regex can't express "bats appears between an
+# if-on-$# and its matching fi." Single if/fi nesting tracker — nested
+# `if`s that don't themselves mention $# still count toward depth so we
+# close properly. `elif` is intentionally NOT counted (it doesn't add a
+# nesting level, so the existing `fi` will close the block correctly).
+#
+# Known limitation: one-line forms like `if [ $# -gt 0 ]; then bats "$@"; fi`
+# aren't detected — `next` after the opening `if` skips the rest of the
+# line, so we never see the `bats` or the `fi`. The block stays open for
+# the rest of the file but harmlessly, since depth never reaches 0 without
+# a real `fi` on its own line. This form is vanishingly rare in practice
+# (every existing KKL test task uses the multi-line shape); the false
+# negative is the accepted trade-off.
+check_if_dollar_hash() {
+  local file="$1"
+  awk '
+    # Enter tracking when we see an `if` whose condition mentions $#.
+    !in_if && /^[[:space:]]*if[[:space:]].*\$#/ {
+      in_if=1; has_bats=0; depth=1; next
+    }
+    # Any further `if` inside the tracked block bumps depth.
+    in_if && /^[[:space:]]*if[[:space:]]/ { depth++; next }
+    # A `fi` pops depth; when it reaches 0 we exit the block.
+    in_if && /^[[:space:]]*fi([[:space:]]|$)/ {
+      depth--
+      if (depth==0) {
+        if (has_bats) { hit=1; exit 0 }
+        in_if=0
+      }
+      next
+    }
+    # Inside the tracked block, note any real `bats` invocation.
+    # (Line-start form rules out `*.bats` globs inside the body.)
+    # `elif` lines fall through here — they do not match the `if` rule
+    # above and do not add depth, which is the intended behavior.
+    in_if && /^[[:space:]]*(exec[[:space:]]+)?bats[[:space:]]/ { has_bats=1 }
+    END { exit hit ? 0 : 1 }
+  ' "$file"
+}
+
+failures=0
+
+for target in "${TARGETS[@]}"; do
+  if [[ ! -e "$target" ]]; then
+    echo "ERROR: target does not exist: $target" >&2
+    exit 1
+  fi
+
+  name=$(basename "$target")
+
+  # File-level ignore via mise.toml
+  toml="$target/mise.toml"
+  if [[ -f "$toml" ]] && rg -q 'codebase:ignore bats-test-task' "$toml"; then
+    echo "SKIP  $name (codebase:ignore)"
+    continue
+  fi
+
+  task="$target/.mise/tasks/test"
+  if [[ ! -f "$task" ]]; then
+    echo "OK    $name (no .mise/tasks/test — nothing to check)"
+    continue
+  fi
+
+  issues=()
+
+  # --- cheap text signals (ripgrep) ---
+
+  # Required: variadic arg spec (either `var=true` or `var=#true`, either
+  # order of `var=` / `help=`).
+  if ! rg -q '^#USAGE arg .*var=#?true' "$task"; then
+    issues+=("missing #USAGE arg spec — expected: #USAGE arg \"[args]...\" var=#true help=\"…\"")
+  fi
+
+  # Required: at least one example so invocation is discoverable via --help.
+  if ! rg -q '^#USAGE example ' "$task"; then
+    issues+=("missing #USAGE example directives (invocation styles undiscoverable in --help)")
+  fi
+
+  # Required: exactly one `bats` invocation. Match only real invocations
+  # (line-start form) — `*.bats` globs inside the for-loop don't count.
+  if bats_count=$(rg -c "$BATS_INVOKE_RE" "$task"); then
+    :
+  else
+    bats_count=0
+  fi
+  if [[ "$bats_count" -eq 0 ]]; then
+    issues+=("no 'bats' invocation found")
+  elif [[ "$bats_count" -gt 1 ]]; then
+    issues+=("$bats_count 'bats' invocations found — canonical pattern has exactly one")
+  fi
+
+  # --- structural: outer `if $#` wrapping bats ---
+  if check_if_dollar_hash "$task"; then
+    issues+=("outer 'if [[ \$# … ]]' wraps bats — use the flat for-loop pattern instead")
+  fi
+
+  # --- report ---
+  if [[ ${#issues[@]} -gt 0 ]]; then
+    echo "FAIL  $name: ${#issues[@]} issue(s) in .mise/tasks/test"
+    for issue in "${issues[@]}"; do
+      echo "  - $issue"
+    done
+    echo "  hint: see fold/notes/bats-tool-testing.md ('The test task') for the canonical shape"
+    failures=$((failures + 1))
+  else
+    echo "OK    $name (.mise/tasks/test follows canonical pattern)"
+  fi
+done
+
+exit "$failures"

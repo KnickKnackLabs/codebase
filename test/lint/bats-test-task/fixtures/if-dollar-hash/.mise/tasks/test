@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#MISE description="Run BATS tests"
+#USAGE arg "[args]..." var=#true help="..."
+#USAGE example "mise run test"
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+if [ $# -gt 0 ]; then
+  exec bats "$@"
+else
+  exec bats "$REPO_DIR/test/"
+fi

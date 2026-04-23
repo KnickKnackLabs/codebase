@@ -2,6 +2,8 @@
 bats = "1.13.0"
 ast-grep = "0.40.5"
 shellcheck = "0.11.0"
+ripgrep = "14.1.1"
+fd = "10.2.0"
 
 [settings]
 quiet = true

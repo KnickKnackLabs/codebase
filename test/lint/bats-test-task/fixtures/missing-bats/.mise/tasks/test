@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Run tests (broken — no bats call)"
+#USAGE arg "[args]..." var=#true help="..."
+#USAGE example "mise run test"
+set -euo pipefail
+
+echo "this file has USAGE but never calls bats"
