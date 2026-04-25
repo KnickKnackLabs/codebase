@@ -14,6 +14,11 @@ if [[ ${#TARGETS[@]} -eq 0 ]]; then
   exit 1
 fi
 
+# Resolve relative paths against CALLER_PWD (see lib/shell-files.sh).
+for i in "${!TARGETS[@]}"; do
+  TARGETS[$i]=$(resolve_target "${TARGETS[$i]}")
+done
+
 # Scan a single file. Single-pass: track loop depth as we go,
 # classify hits inline. Emits hits on stdout, one per line.
 # (Bash 3 compatible — no namerefs.)

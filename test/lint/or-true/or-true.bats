@@ -230,3 +230,29 @@ EOF
   [[ "$output" == *"Missing required arg"* ]]
   [[ "$output" == *"<targets>"* ]]
 }
+
+# ============================================================================
+# Relative path resolution (regression: codebase#24)
+# ============================================================================
+
+@test "or-true: relative path resolves against CALLER_PWD, not codebase install dir" {
+  # Regression: when invoked via the shiv shim, relative paths resolved
+  # against codebase's own install directory (which is clean), producing
+  # a silent false negative. The fix uses CALLER_PWD to resolve.
+  local tmp
+  tmp=$(mktemp -d)
+  mkdir -p "$tmp/.mise/tasks"
+  cat > "$tmp/.mise/tasks/t" <<'EOF'
+#!/usr/bin/env bash
+foo || true
+EOF
+
+  # Set CALLER_PWD to the tmpdir and pass a relative path.
+  CALLER_PWD="$tmp" run codebase lint:or-true .mise/tasks
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"FAIL"* ]]
+  [[ "$output" == *"|| true"* ]]
+  rm -rf "$tmp"
+}
+
+

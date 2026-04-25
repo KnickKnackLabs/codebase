@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+# shellcheck source=../../../lib/shell-files.sh
+source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
+
 # Rationale: tests that invoke `.mise/tasks/*` scripts directly bypass
 # mise's USAGE parser, CALLER_PWD plumbing, flag parsing, and `[env]`
 # loading — and then have to fake all of that with exported `usage_*`
@@ -39,6 +42,11 @@ if [[ ${#TARGETS[@]} -eq 0 ]]; then
   echo "ERROR: at least one target is required" >&2
   exit 1
 fi
+
+# Resolve relative paths against CALLER_PWD (see lib/shell-files.sh).
+for i in "${!TARGETS[@]}"; do
+  TARGETS[$i]=$(resolve_target "${TARGETS[$i]}")
+done
 
 # Invocation signatures we flag. All three must appear at the start of
 # a statement — either at line start (after whitespace) or after a
