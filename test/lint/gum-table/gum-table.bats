@@ -145,3 +145,25 @@ setup() {
   [ "$status" -ne 0 ]
   [[ "$output" == *"ERROR"* ]]
 }
+
+# ============================================================================
+# Relative path resolution (regression: codebase#22)
+# ============================================================================
+
+@test "relative path resolves against CALLER_PWD" {
+  # Same regression as or-true: relative targets resolved against
+  # codebase's install dir, not the caller's cwd.
+  local tmp
+  tmp=$(mktemp -d)
+  mkdir -p "$tmp/.mise/tasks"
+  cat > "$tmp/.mise/tasks/t" <<'EOF'
+#!/usr/bin/env bash
+echo ok
+EOF
+
+  CALLER_PWD="$tmp" run codebase lint:gum-table .mise/tasks
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK"* ]]
+  [[ "$output" == *"1 file(s)"* ]]
+  rm -rf "$tmp"
+}

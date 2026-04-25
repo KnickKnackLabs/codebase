@@ -31,6 +31,13 @@ if [[ ${#TARGETS[@]} -eq 0 ]]; then
   exit 1
 fi
 
+# Resolve relative paths against CALLER_PWD (shim sets it to the
+# caller's cwd; without it, relative paths resolve against codebase's
+# own install directory — wrong repo, silent false negatives).
+for i in "${!TARGETS[@]}"; do
+  TARGETS[$i]=$(resolve_target "${TARGETS[$i]}")
+done
+
 # Patterns (checked independently so we can name them in output):
 #   '|| true'  — explicit error-suppression
 #   '|| :'     — POSIX-shorthand equivalent (no-op builtin)

@@ -10,6 +10,25 @@
 # files using $MISE_CONFIG_ROOT; see fold/notes/mise-gotchas.md. From a lib
 # or test-helper context, self-locate via ${BASH_SOURCE[0]} instead.
 
+# resolve_target <path>
+#
+# Resolve a caller-relative path to an absolute path. Uses CALLER_PWD
+# (exported by the shiv shim) as the base for relative paths. Falls back
+# to PWD when CALLER_PWD is unset (e.g., running tasks directly via mise
+# inside the codebase repo itself).
+#
+# Absolute paths pass through unchanged.
+resolve_target() {
+  local path="$1"
+  if [[ "$path" == /* ]]; then
+    printf '%s\n' "$path"
+  elif [[ -n "${CALLER_PWD:-}" ]]; then
+    printf '%s\n' "$CALLER_PWD/$path"
+  else
+    printf '%s\n' "$PWD/$path"
+  fi
+}
+
 # discover_shell_files <target>
 #
 # Emit paths of shell files under <target>, one per line. A file is

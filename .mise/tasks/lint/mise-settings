@@ -5,6 +5,9 @@
 
 set -euo pipefail
 
+# shellcheck source=../../../lib/shell-files.sh
+source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
+
 FIX="${usage_fix:-false}"
 
 # Required settings
@@ -17,6 +20,11 @@ if [[ ${#TARGETS[@]} -eq 0 ]]; then
   echo "ERROR: at least one target is required" >&2
   exit 1
 fi
+
+# Resolve relative paths against CALLER_PWD (see lib/shell-files.sh).
+for i in "${!TARGETS[@]}"; do
+  TARGETS[$i]=$(resolve_target "${TARGETS[$i]}")
+done
 
 failures=0
 

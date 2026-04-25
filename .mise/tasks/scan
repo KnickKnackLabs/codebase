@@ -29,6 +29,11 @@ if [[ ${#TARGETS[@]} -eq 0 ]]; then
   exit 1
 fi
 
+# Resolve relative paths against CALLER_PWD (see lib/shell-files.sh).
+for i in "${!TARGETS[@]}"; do
+  TARGETS[$i]=$(resolve_target "${TARGETS[$i]}")
+done
+
 # Validate all targets exist
 for target in "${TARGETS[@]}"; do
   if [[ ! -e "$target" ]]; then

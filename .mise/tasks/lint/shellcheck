@@ -22,6 +22,11 @@ if [[ ${#TARGETS[@]} -eq 0 ]]; then
   exit 1
 fi
 
+# Resolve relative paths against CALLER_PWD (see lib/shell-files.sh).
+for i in "${!TARGETS[@]}"; do
+  TARGETS[$i]=$(resolve_target "${TARGETS[$i]}")
+done
+
 if ! command -v shellcheck >/dev/null 2>&1; then
   echo "ERROR: shellcheck not found on PATH" >&2
   exit 127  # Unix convention: 127 = command not found

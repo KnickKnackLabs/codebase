@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+# shellcheck source=../../../lib/shell-files.sh
+source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
+
 # Rationale: BATS test tasks should (a) declare their variadic usage so
 # `mise run test <suite>` / `mise run test -- --filter pat` Just Work,
 # (b) show examples so invocation is discoverable via `--help`, and
@@ -41,6 +44,11 @@ if [[ ${#TARGETS[@]} -eq 0 ]]; then
   echo "ERROR: at least one target is required" >&2
   exit 1
 fi
+
+# Resolve relative paths against CALLER_PWD (see lib/shell-files.sh).
+for i in "${!TARGETS[@]}"; do
+  TARGETS[$i]=$(resolve_target "${TARGETS[$i]}")
+done
 
 # A real `bats` invocation starts a line (possibly preceded by whitespace
 # and an optional `exec`). This rules out `*.bats` globs, `-name "*.bats"`,
