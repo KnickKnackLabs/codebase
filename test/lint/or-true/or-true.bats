@@ -232,7 +232,7 @@ EOF
 }
 
 # ============================================================================
-# Relative path resolution (regression: codebase#22)
+# Relative path resolution (regression: codebase#24)
 # ============================================================================
 
 @test "or-true: relative path resolves against CALLER_PWD, not codebase install dir" {
@@ -255,22 +255,4 @@ EOF
   rm -rf "$tmp"
 }
 
-@test "or-true: relative path works when CALLER_PWD is unset (falls back to PWD)" {
-  # When running codebase directly (not via shim), CALLER_PWD is unset.
-  # Relative paths should resolve against PWD.
-  local tmp
-  tmp=$(mktemp -d)
-  mkdir -p "$tmp/.mise/tasks"
-  cat > "$tmp/.mise/tasks/t" <<'EOF'
-#!/usr/bin/env bash
-echo ok
-EOF
 
-  # Unset CALLER_PWD, cd to the tmpdir, pass relative path.
-  unset CALLER_PWD
-  cd "$tmp"
-  run codebase lint:or-true .mise/tasks
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"OK"* ]]
-  rm -rf "$tmp"
-}

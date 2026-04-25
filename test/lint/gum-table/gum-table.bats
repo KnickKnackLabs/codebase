@@ -147,23 +147,27 @@ setup() {
 }
 
 # ============================================================================
-# Relative path resolution (regression: codebase#22)
+# Relative path resolution (regression: codebase#24)
 # ============================================================================
 
-@test "relative path resolves against CALLER_PWD" {
-  # Same regression as or-true: relative targets resolved against
-  # codebase's install dir, not the caller's cwd.
+@test "relative path resolves against CALLER_PWD (dirty fixture)" {
+  # Regression: relative targets resolved against codebase's install
+  # dir, not the caller's cwd — silent false negatives.
+  # Uses a real dirty fixture to prove the violation is found.
   local tmp
   tmp=$(mktemp -d)
-  mkdir -p "$tmp/.mise/tasks"
-  cat > "$tmp/.mise/tasks/t" <<'EOF'
+  mkdir -p "$tmp/tasks"
+  # A loop-table violation (high-confidence WARN).
+  cat > "$tmp/tasks/fmt" <<'SCRIPT'
 #!/usr/bin/env bash
-echo ok
-EOF
+while read -r name status; do
+  printf "%-20s %s\n" "$name" "$status"
+done < input.txt
+SCRIPT
 
-  CALLER_PWD="$tmp" run codebase lint:gum-table .mise/tasks
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"OK"* ]]
-  [[ "$output" == *"1 file(s)"* ]]
+  CALLER_PWD="$tmp" run codebase lint:gum-table tasks
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"WARN"* ]]
+  [[ "$output" == *"loop-table"* ]]
   rm -rf "$tmp"
 }
