@@ -23,7 +23,7 @@ fi
 
 # Resolve relative paths against CALLER_PWD (see lib/shell-files.sh).
 for i in "${!TARGETS[@]}"; do
-  TARGETS[$i]=$(resolve_target "${TARGETS[$i]}")
+  TARGETS[i]=$(resolve_target "${TARGETS[i]}")
 done
 
 failures=0
@@ -70,14 +70,18 @@ for target in "${TARGETS[@]}"; do
       printf '\n[settings]\n' >> "$toml"
     fi
 
-    for setting in "${missing[@]}"; do
-      if ! grep -q "^${setting%%=*}=" "$toml"; then
-        # Insert after [settings] line
-        sed -i '' "/^\[settings\]/a\\
-$setting
-" "$toml"
+    # Insert all missing settings after [settings]. Avoid sed -i: BSD sed
+    # (macOS) and GNU sed (Linux CI) use incompatible in-place flags.
+    tmp=$(mktemp)
+    inserted=false
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      printf '%s\n' "$line" >> "$tmp"
+      if ! $inserted && [[ "$line" =~ ^\[settings\] ]]; then
+        printf '%s\n' "${missing[@]}" >> "$tmp"
+        inserted=true
       fi
-    done
+    done < "$toml"
+    mv "$tmp" "$toml"
 
     echo "FIXED $name: added ${missing[*]}"
   else
