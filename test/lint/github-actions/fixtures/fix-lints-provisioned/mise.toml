@@ -1,0 +1,11 @@
+[plugins]
+shiv = "https://github.com/KnickKnackLabs/vfox-shiv"
+
+[tools]
+"shiv:codebase" = "latest"
+
+[settings]
+quiet = true
+
+[_.codebase]
+lint = ["mise-settings", "shellcheck"]

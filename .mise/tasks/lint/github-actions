@@ -51,6 +51,65 @@ has_test_task() {
   [[ -f "$target/.mise/tasks/test" || -f "$target/.mise/tasks/test/_default" ]]
 }
 
+section_has_key() {
+  local toml="$1"
+  local section="$2"
+  local key_pattern="$3"
+
+  awk -v section="$section" -v key_pattern="$key_pattern" '
+    $0 ~ "^[[:space:]]*\\[" section "\\][[:space:]]*$" { in_section=1; next }
+    /^[[:space:]]*\[/ { in_section=0 }
+    in_section && $0 ~ key_pattern { found=1 }
+    END { exit found ? 0 : 1 }
+  ' "$toml"
+}
+
+ensure_section_key() {
+  local toml="$1"
+  local section="$2"
+  local key_line="$3"
+  local tmp
+
+  if ! grep -q "^[[:space:]]*\[$section\][[:space:]]*$" "$toml"; then
+    printf '\n[%s]\n%s\n' "$section" "$key_line" >> "$toml"
+    return 0
+  fi
+
+  tmp=$(mktemp)
+  awk -v section="$section" -v key_line="$key_line" '
+    {
+      print
+      if (!inserted && $0 ~ "^[[:space:]]*\\[" section "\\][[:space:]]*$") {
+        print key_line
+        inserted=1
+      }
+    }
+  ' "$toml" > "$tmp"
+  mv "$tmp" "$toml"
+}
+
+ensure_codebase_tooling() {
+  local target="$1"
+  local toml="$target/mise.toml"
+  local added=()
+
+  [[ -f "$toml" ]] || return 0
+
+  if ! section_has_key "$toml" "plugins" '^[[:space:]]*shiv[[:space:]]*='; then
+    ensure_section_key "$toml" "plugins" 'shiv = "https://github.com/KnickKnackLabs/vfox-shiv"'
+    added+=("shiv plugin")
+  fi
+
+  if ! section_has_key "$toml" "tools" '^[[:space:]]*"shiv:codebase"[[:space:]]*='; then
+    ensure_section_key "$toml" "tools" '"shiv:codebase" = "latest"'
+    added+=("shiv:codebase tool")
+  fi
+
+  if [[ ${#added[@]} -gt 0 ]]; then
+    echo "FIX   $(basename "$target"): added ${added[*]}"
+  fi
+}
+
 collect_workflows() {
   local target="$1"
   local workflows_dir="$target/.github/workflows"
@@ -116,6 +175,8 @@ YAML
   fi
 
   if [[ -n "$lints" ]]; then
+    ensure_codebase_tooling "$target"
+
     cat >> "$workflow" <<'YAML'
 
       - name: Run codebase lints

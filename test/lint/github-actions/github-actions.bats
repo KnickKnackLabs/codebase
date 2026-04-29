@@ -69,6 +69,30 @@ copy_fixture() {
   grep -q 'codebase "$target" "$PWD"' "$workflow"
 }
 
+@test "fix: provisions codebase CLI when configured lint rules are generated" {
+  target=$(copy_fixture fix-lints)
+
+  run codebase lint:github-actions --fix "$target"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"added"*"shiv plugin"* ]]
+  [[ "$output" == *"added"*"shiv:codebase tool"* ]]
+
+  grep -q '^\[plugins\]' "$target/mise.toml"
+  grep -q '^shiv = "https://github.com/KnickKnackLabs/vfox-shiv"' "$target/mise.toml"
+  grep -q '^\[tools\]' "$target/mise.toml"
+  grep -q '^"shiv:codebase" = "latest"' "$target/mise.toml"
+}
+
+@test "fix: does not duplicate existing codebase CLI provisioning" {
+  target=$(copy_fixture fix-lints-provisioned)
+
+  run codebase lint:github-actions --fix "$target"
+  [ "$status" -eq 0 ]
+
+  [ "$(grep -c '^shiv = "https://github.com/KnickKnackLabs/vfox-shiv"' "$target/mise.toml")" -eq 1 ]
+  [ "$(grep -c '^"shiv:codebase" = "latest"' "$target/mise.toml")" -eq 1 ]
+}
+
 @test "fix: fails when no safe checks can be inferred" {
   target=$(copy_fixture fix-empty)
 
