@@ -1,0 +1,3 @@
+# codebase:ignore github-actions
+[settings]
+quiet = true
