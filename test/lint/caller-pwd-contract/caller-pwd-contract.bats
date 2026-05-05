@@ -28,6 +28,16 @@ printf "%s\n" "$TARGET"')
   [[ "$output" == *"OK"* ]]
 }
 
+@test "dot target derives package name from physical repo directory" {
+  target=$(make_pkg shimmer '#!/usr/bin/env bash
+TARGET="${SHIMMER_CALLER_PWD:-${CALLER_PWD:-.}}"
+printf "%s\n" "$TARGET"')
+
+  CODEBASE_CALLER_PWD="$target" run codebase lint:caller-pwd-contract .
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"expects SHIMMER_CALLER_PWD"* ]]
+}
+
 @test "fails on SHIV_CALLER_PWD in a non-shiv package" {
   target=$(make_pkg shimmer '#!/usr/bin/env bash
 TARGET="${SHIV_CALLER_PWD:-${CALLER_PWD:-.}}"
