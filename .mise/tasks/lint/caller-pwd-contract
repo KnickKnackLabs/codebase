@@ -33,8 +33,9 @@ caller_var_for_target() {
 scan_file() {
   local file="$1"
   local package_var="$2"
+  local rel="$3"
   local lineno=0
-  local line trimmed
+  local line trimmed var
 
   while IFS= read -r line || [[ -n "$line" ]]; do
     lineno=$((lineno + 1))
@@ -44,8 +45,11 @@ scan_file() {
 
     trimmed="${line#"${line%%[![:space:]]*}"}"
 
-    if [[ "$package_var" != "SHIV_CALLER_PWD" && "$line" == *"SHIV_CALLER_PWD"* ]]; then # codebase:ignore caller-pwd-contract
-      echo "$lineno: uses SHIV_CALLER_PWD instead of $package_var: $trimmed" # codebase:ignore caller-pwd-contract
+    if [[ "$rel" != test/* ]]; then
+      while IFS= read -r var; do
+        [[ "$var" == "$package_var" || "$var" == "CALLER_PWD" ]] && continue
+        echo "$lineno: uses $var instead of $package_var: $trimmed"
+      done < <(grep -oE '\b[A-Z_][A-Z0-9_]*_CALLER_PWD\b' <<< "$line" | sort -u)
     fi
 
     if [[ "$line" =~ (^|[[:space:]])export[[:space:]]+CALLER_PWD= ]]; then
@@ -100,7 +104,7 @@ for target in "${TARGETS[@]}"; do
       [[ -z "$hit" ]] && continue
       target_output+="  $rel:$hit"$'\n'
       hit_count=$((hit_count + 1))
-    done < <(scan_file "$file" "$package_var")
+    done < <(scan_file "$file" "$package_var" "$rel")
   done
 
   if [[ "$hit_count" -gt 0 ]]; then
