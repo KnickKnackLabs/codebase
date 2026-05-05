@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+#MISE description="Check shiv caller-cwd environment variable contract"
+#USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/shell-files.sh
+source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
+
+IFS=' ' read -ra TARGETS <<< "${usage_targets}"
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+  echo "ERROR: at least one target is required" >&2
+  exit 1
+fi
+
+for i in "${!TARGETS[@]}"; do
+  TARGETS[i]=$(resolve_target "${TARGETS[i]}")
+done
+
+caller_var_for_target() {
+  local target="$1"
+  local name var
+  name=$(basename "$target")
+  var=$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9_]/_/g')
+  case "$var" in
+    [A-Z_]*) ;;
+    *) var="_$var" ;;
+  esac
+  printf '%s_CALLER_PWD\n' "$var"
+}
+
+scan_file() {
+  local file="$1"
+  local package_var="$2"
+  local lineno=0
+  local line trimmed
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    lineno=$((lineno + 1))
+
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" == *"codebase:ignore caller-pwd-contract"* ]] && continue
+
+    trimmed="${line#"${line%%[![:space:]]*}"}"
+
+    if [[ "$package_var" != "SHIV_CALLER_PWD" && "$line" == *"SHIV_CALLER_PWD"* ]]; then # codebase:ignore caller-pwd-contract
+      echo "$lineno: uses SHIV_CALLER_PWD instead of $package_var: $trimmed" # codebase:ignore caller-pwd-contract
+    fi
+
+    if [[ "$line" =~ (^|[[:space:]])export[[:space:]]+CALLER_PWD= ]]; then
+      echo "$lineno: exports legacy CALLER_PWD at runtime: $trimmed"
+    fi
+
+    if [[ "$line" =~ (^|[[:space:]])CALLER_PWD= && ! "$line" =~ \$\{CALLER_PWD ]]; then
+      echo "$lineno: assigns legacy CALLER_PWD at runtime: $trimmed"
+    fi
+
+    # shellcheck disable=SC2016  # intentional: match literal '${CALLER_PWD:-'
+    if [[ "$line" == *'${CALLER_PWD:-'* && "$line" != *"\${$package_var:-\${CALLER_PWD:-"* ]]; then
+      if [[ ! "$line" =~ ^[[:space:]]*(if|elif)[[:space:]] ]]; then
+        echo "$lineno: legacy CALLER_PWD fallback must come after $package_var: $trimmed"
+      fi
+    fi
+  done < "$file"
+}
+
+failures=0
+
+for target in "${TARGETS[@]}"; do
+  if [[ ! -e "$target" ]]; then
+    echo "ERROR: target does not exist: $target" >&2
+    exit 1
+  fi
+
+  name=$(basename "$target")
+  toml="$target/mise.toml"
+  if [[ -f "$toml" ]] && grep -m1 -q 'codebase:ignore caller-pwd-contract' "$toml"; then
+    echo "SKIP  $name (codebase:ignore)"
+    continue
+  fi
+
+  package_var=$(caller_var_for_target "$target")
+
+  files=()
+  while IFS= read -r f; do
+    [[ -n "$f" ]] && files+=("$f")
+  done < <(discover_shell_files "$target")
+
+  if [[ ${#files[@]} -eq 0 ]]; then
+    echo "OK    $name (no shell files found)"
+    continue
+  fi
+
+  hit_count=0
+  target_output=""
+  for file in "${files[@]}"; do
+    rel="${file#"$target"/}"
+    while IFS= read -r hit; do
+      [[ -z "$hit" ]] && continue
+      target_output+="  $rel:$hit"$'\n'
+      hit_count=$((hit_count + 1))
+    done < <(scan_file "$file" "$package_var")
+  done
+
+  if [[ "$hit_count" -gt 0 ]]; then
+    echo "FAIL  $name: $hit_count caller-cwd contract issue(s)"
+    printf '%s' "$target_output"
+    echo "  hint: shiv shims set ${package_var}; consumers should prefer it with legacy CALLER_PWD only as fallback."
+    failures=$((failures + 1))
+  else
+    echo "OK    $name (${#files[@]} file(s) clean; expects $package_var)"
+  fi
+done
+
+exit "$failures"

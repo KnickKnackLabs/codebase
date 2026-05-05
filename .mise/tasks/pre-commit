@@ -8,9 +8,9 @@ set -euo pipefail
 REVERT="${usage_revert:-false}"
 CHECK="${usage_check:-false}"
 
-# Find repo root — use CALLER_PWD (set by shiv) if available,
-# otherwise fall back to current directory
-CALLER="${CALLER_PWD:-$(pwd)}"
+# Find repo root — use CODEBASE_CALLER_PWD (set by shiv) if available,
+# otherwise fall back to legacy CALLER_PWD during migration and then current directory.
+CALLER="${CODEBASE_CALLER_PWD:-${CALLER_PWD:-$(pwd)}}"
 if ! REPO_ROOT=$(git -C "$CALLER" rev-parse --show-toplevel 2>/dev/null); then
   REPO_ROOT=""
 fi

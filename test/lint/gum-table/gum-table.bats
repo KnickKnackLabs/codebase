@@ -150,7 +150,7 @@ setup() {
 # Relative path resolution (regression: codebase#24)
 # ============================================================================
 
-@test "relative path resolves against CALLER_PWD (dirty fixture)" {
+@test "relative path resolves against CODEBASE_CALLER_PWD (dirty fixture)" {
   # Regression: relative targets resolved against codebase's install
   # dir, not the caller's cwd — silent false negatives.
   # Uses a real dirty fixture to prove the violation is found.
@@ -165,7 +165,7 @@ while read -r name status; do
 done < input.txt
 SCRIPT
 
-  CALLER_PWD="$tmp" run codebase lint:gum-table tasks
+  CODEBASE_CALLER_PWD="$tmp" run codebase lint:gum-table tasks
   [ "$status" -ne 0 ]
   [[ "$output" == *"WARN"* ]]
   [[ "$output" == *"loop-table"* ]]

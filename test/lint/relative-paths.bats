@@ -1,11 +1,11 @@
 #!/usr/bin/env bats
 # Integration smoke tests: every task that takes target paths correctly
-# resolves relative paths against CALLER_PWD. Regression coverage for
+# resolves relative paths against CODEBASE_CALLER_PWD. Regression coverage for
 # codebase#24 — each task has its own copy of the resolution loop, so a
 # regression in any one isn't caught by tests on the others.
 #
 # Shape: create a tmpdir with content appropriate for the rule, set
-# CALLER_PWD to the tmpdir, pass a relative path, assert the task
+# CODEBASE_CALLER_PWD to the tmpdir, pass a relative path, assert the task
 # finds the content (not "target does not exist").
 
 load ../test_helper
@@ -56,11 +56,11 @@ EOF
 
 # --- lint:shellcheck -------------------------------------------------------
 
-@test "shellcheck: relative path resolves against CALLER_PWD" {
+@test "shellcheck: relative path resolves against CODEBASE_CALLER_PWD" {
   local tmp
   tmp=$(make_task_dir "echo hello")
 
-  CALLER_PWD="$tmp" run codebase lint:shellcheck .mise/tasks
+  CODEBASE_CALLER_PWD="$tmp" run codebase lint:shellcheck .mise/tasks
   # shellcheck may warn but shouldn't error on "target does not exist"
   [[ "$output" != *"does not exist"* ]]
   rm -rf "$tmp"
@@ -68,18 +68,18 @@ EOF
 
 # --- lint:bats-test-helper -------------------------------------------------
 
-@test "bats-test-helper: relative path resolves against CALLER_PWD" {
+@test "bats-test-helper: relative path resolves against CODEBASE_CALLER_PWD" {
   local tmp
   tmp=$(make_test_dir 'run notes list')
 
-  CALLER_PWD="$tmp" run codebase lint:bats-test-helper test
+  CODEBASE_CALLER_PWD="$tmp" run codebase lint:bats-test-helper test
   [[ "$output" != *"does not exist"* ]]
   rm -rf "$tmp"
 }
 
 # --- lint:bats-test-task ---------------------------------------------------
 
-@test "bats-test-task: relative path resolves against CALLER_PWD" {
+@test "bats-test-task: relative path resolves against CODEBASE_CALLER_PWD" {
   local tmp
   tmp=$(mktemp -d)
   mkdir -p "$tmp/.mise/tasks"
@@ -93,25 +93,25 @@ set -euo pipefail
 bats test/
 EOF
 
-  CALLER_PWD="$tmp" run codebase lint:bats-test-task .
+  CODEBASE_CALLER_PWD="$tmp" run codebase lint:bats-test-task .
   [[ "$output" != *"does not exist"* ]]
   rm -rf "$tmp"
 }
 
 # --- lint:mcr-scope --------------------------------------------------------
 
-@test "mcr-scope: relative path resolves against CALLER_PWD" {
+@test "mcr-scope: relative path resolves against CODEBASE_CALLER_PWD" {
   local tmp
   tmp=$(make_test_dir 'echo ok')
 
-  CALLER_PWD="$tmp" run codebase lint:mcr-scope test
+  CODEBASE_CALLER_PWD="$tmp" run codebase lint:mcr-scope test
   [[ "$output" != *"does not exist"* ]]
   rm -rf "$tmp"
 }
 
 # --- lint:mise-settings ----------------------------------------------------
 
-@test "mise-settings: relative path resolves against CALLER_PWD" {
+@test "mise-settings: relative path resolves against CODEBASE_CALLER_PWD" {
   local tmp
   tmp=$(mktemp -d)
   # Create a subdir to use as the relative target.
@@ -122,7 +122,7 @@ quiet = true
 task_output = "interleave"
 EOF
 
-  CALLER_PWD="$tmp" run codebase lint:mise-settings project
+  CODEBASE_CALLER_PWD="$tmp" run codebase lint:mise-settings project
   [[ "$output" != *"does not exist"* ]]
   [[ "$output" == *"OK"* ]] || [[ "$output" == *"FAIL"* ]]
   rm -rf "$tmp"
@@ -130,11 +130,11 @@ EOF
 
 # --- scan ------------------------------------------------------------------
 
-@test "scan: relative path resolves against CALLER_PWD" {
+@test "scan: relative path resolves against CODEBASE_CALLER_PWD" {
   local tmp
   tmp=$(make_task_dir 'mise run test')
 
-  CALLER_PWD="$tmp" run codebase scan -p 'mise run $$$' .mise/tasks
+  CODEBASE_CALLER_PWD="$tmp" run codebase scan -p 'mise run $$$' .mise/tasks
   # May or may not find matches, but shouldn't error on path resolution.
   [[ "$output" != *"does not exist"* ]]
   rm -rf "$tmp"
@@ -142,11 +142,11 @@ EOF
 
 # --- migrate/task-pattern --------------------------------------------------
 
-@test "task-pattern: relative path resolves against CALLER_PWD" {
+@test "task-pattern: relative path resolves against CODEBASE_CALLER_PWD" {
   local tmp
   tmp=$(make_task_dir 'mise run test')
 
-  CALLER_PWD="$tmp" run codebase migrate:task-pattern .mise/tasks
+  CODEBASE_CALLER_PWD="$tmp" run codebase migrate:task-pattern .mise/tasks
   [[ "$output" != *"does not exist"* ]]
   rm -rf "$tmp"
 }
