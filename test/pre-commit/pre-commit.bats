@@ -19,8 +19,8 @@ lint = ["mise-settings", "gum-table"]
 [_.codebase.scope]
 gum-table = ".mise/tasks"
 EOF
-  # The pre-commit task resolves the target repo from CALLER_PWD.
-  export CALLER_PWD="$REPO"
+  # The pre-commit task resolves the target repo from CODEBASE_CALLER_PWD.
+  export CODEBASE_CALLER_PWD="$REPO"
 }
 
 # ============================================================================
@@ -264,7 +264,7 @@ EOF
 # ============================================================================
 
 @test "error: fails outside git repo" {
-  export CALLER_PWD="$BATS_TEST_TMPDIR"
+  export CODEBASE_CALLER_PWD="$BATS_TEST_TMPDIR"
   run codebase pre-commit
   [ "$status" -ne 0 ]
   [[ "$output" == *"not in a git repository"* ]]

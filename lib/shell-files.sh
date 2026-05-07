@@ -12,16 +12,18 @@
 
 # resolve_target <path>
 #
-# Resolve a caller-relative path to an absolute path. Uses CALLER_PWD
+# Resolve a caller-relative path to an absolute path. Uses CODEBASE_CALLER_PWD
 # (exported by the shiv shim) as the base for relative paths. Falls back
-# to PWD when CALLER_PWD is unset (e.g., running tasks directly via mise
-# inside the codebase repo itself).
+# to legacy CALLER_PWD during migration, then PWD when no caller context is set
+# (e.g., running tasks directly via mise inside the codebase repo itself).
 #
 # Absolute paths pass through unchanged.
 resolve_target() {
   local path="$1"
   if [[ "$path" == /* ]]; then
     printf '%s\n' "$path"
+  elif [[ -n "${CODEBASE_CALLER_PWD:-}" ]]; then
+    printf '%s\n' "$CODEBASE_CALLER_PWD/$path"
   elif [[ -n "${CALLER_PWD:-}" ]]; then
     printf '%s\n' "$CALLER_PWD/$path"
   else
