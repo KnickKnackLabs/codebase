@@ -21,6 +21,10 @@ done
 caller_var_for_target() {
   local target="$1"
   local name var
+  target="${target%/}"
+  if [[ "$(basename "$target")" == "." || "$(basename "$target")" == ".." ]]; then
+    target=$(cd "$target" && pwd -P)
+  fi
   name=$(basename "$target")
   var=$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9_]/_/g')
   case "$var" in
