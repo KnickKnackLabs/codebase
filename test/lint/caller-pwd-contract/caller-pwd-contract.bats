@@ -49,6 +49,16 @@ printf "%s\n" "$TARGET"')
   [[ "$output" == *"legacy CALLER_PWD fallback must come after SHIMMER_CALLER_PWD"* ]]
 }
 
+@test "fails on any non-package caller var, not just SHIV_CALLER_PWD" {
+  target=$(make_pkg modules '#!/usr/bin/env bash
+TARGET="${THREADS_CALLER_PWD:-.}"
+printf "%s\n" "$TARGET"')
+
+  run codebase lint:caller-pwd-contract "$target"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"uses THREADS_CALLER_PWD instead of MODULES_CALLER_PWD"* ]]
+}
+
 @test "fails when runtime exports legacy CALLER_PWD" {
   target=$(make_pkg bad-export '#!/usr/bin/env bash
 export CALLER_PWD="$PWD"
