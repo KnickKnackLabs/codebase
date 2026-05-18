@@ -55,7 +55,7 @@ copy_fixture() {
   grep -q 'run: mise run test' "$workflow"
 }
 
-@test "fix: includes configured codebase lint rules" {
+@test "fix: includes aggregate codebase lint step" {
   target=$(copy_fixture fix-lints)
 
   run codebase lint:github-actions --fix "$target"
@@ -64,9 +64,9 @@ copy_fixture() {
   workflow="$target/.github/workflows/test.yml"
   [ -f "$workflow" ]
   grep -q 'Run codebase lints' "$workflow"
-  grep -q 'lint:mise-settings' "$workflow"
-  grep -q 'lint:shellcheck' "$workflow"
-  grep -q 'codebase "$target" "$PWD"' "$workflow"
+  grep -q 'run: codebase lint "$PWD"' "$workflow"
+  ! grep -q 'lint:mise-settings' "$workflow"
+  ! grep -q 'lint:shellcheck' "$workflow"
 }
 
 @test "fix: provisions codebase CLI when configured lint rules are generated" {
@@ -91,6 +91,19 @@ copy_fixture() {
 
   [ "$(grep -c '^shiv = "https://github.com/KnickKnackLabs/vfox-shiv"' "$target/mise.toml")" -eq 1 ]
   [ "$(grep -c '^"shiv:codebase" = "latest"' "$target/mise.toml")" -eq 1 ]
+}
+
+@test "fix: updates existing old codebase pin for aggregate workflow" {
+  target=$(copy_fixture fix-lints-provisioned)
+  tmp="$target/mise.toml.tmp"
+  awk '{ gsub(/"latest"/, "\"0.2.0\""); print }' "$target/mise.toml" > "$tmp"
+  mv "$tmp" "$target/mise.toml"
+
+  run codebase lint:github-actions --fix "$target"
+  [ "$status" -eq 0 ]
+
+  grep -q '^"shiv:codebase" = "latest"' "$target/mise.toml"
+  grep -q 'run: codebase lint "$PWD"' "$target/.github/workflows/test.yml"
 }
 
 @test "fix: fails when no safe checks can be inferred" {

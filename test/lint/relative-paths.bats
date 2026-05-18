@@ -54,6 +54,27 @@ EOF
   echo "$tmp"
 }
 
+# --- lint (aggregate) ------------------------------------------------------
+
+@test "lint: relative path resolves against CODEBASE_CALLER_PWD" {
+  local tmp
+  tmp=$(mktemp -d)
+  mkdir -p "$tmp/project"
+  cat > "$tmp/project/mise.toml" <<'EOF'
+[settings]
+quiet = true
+task_output = "interleave"
+
+[_.codebase]
+lint = ["mise-settings"]
+EOF
+
+  CODEBASE_CALLER_PWD="$tmp" run codebase lint project
+  [[ "$output" != *"does not exist"* ]]
+  [[ "$output" == *"OK"* ]] || [[ "$output" == *"FAIL"* ]]
+  rm -rf "$tmp"
+}
+
 # --- lint:shellcheck -------------------------------------------------------
 
 @test "shellcheck: relative path resolves against CODEBASE_CALLER_PWD" {
