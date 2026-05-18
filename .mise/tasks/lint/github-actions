@@ -5,8 +5,8 @@
 
 set -euo pipefail
 
-# shellcheck source=../../../lib/shell-files.sh
-source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
+# shellcheck source=../../../lib/codebase-config.sh
+source "$MISE_CONFIG_ROOT/lib/codebase-config.sh"
 
 FIX="${usage_fix:-false}"
 
@@ -26,25 +26,6 @@ if ! command -v actionlint >/dev/null 2>&1; then
   echo "ERROR: actionlint not found on PATH" >&2
   exit 127
 fi
-
-configured_codebase_lints() {
-  local toml="$1"
-
-  [[ -f "$toml" ]] || return 0
-
-  awk '
-    /^\[_\.codebase\]/ { in_section=1; next }
-    /^\[/ { in_section=0 }
-    in_section && /^lint[ \t]*=/ {
-      gsub(/.*=[ \t]*\[/, "")
-      gsub(/\].*/, "")
-      gsub(/"/, "")
-      gsub(/,/, " ")
-      gsub(/^[ \t]+|[ \t]+$/, "")
-      print
-    }
-  ' "$toml"
-}
 
 has_test_task() {
   local target="$1"
@@ -123,7 +104,7 @@ write_default_workflow() {
   local target="$1"
   local workflow="$target/.github/workflows/test.yml"
   local lints
-  lints=$(configured_codebase_lints "$target/mise.toml")
+  lints=$(codebase_configured_lint_rules "$target")
 
   if ! has_test_task "$target" && [[ -z "$lints" ]]; then
     echo "FAIL  $(basename "$target"): no workflow found and no checks inferred (add .mise/tasks/test or [_.codebase].lint)"
@@ -180,29 +161,7 @@ YAML
     cat >> "$workflow" <<'YAML'
 
       - name: Run codebase lints
-        run: |
-          for target in \
-YAML
-
-    # shellcheck disable=SC2086  # intentional word splitting: lints are simple rule names from TOML
-    set -- $lints
-    local i=1
-    local count=$#
-    local rule
-    for rule in "$@"; do
-      if [[ $i -lt $count ]]; then
-        printf '            lint:%s \\\n' "$rule" >> "$workflow"
-      else
-        printf '            lint:%s
-' "$rule" >> "$workflow"
-      fi
-      i=$((i + 1))
-    done
-
-    cat >> "$workflow" <<'YAML'
-          do
-            codebase "$target" "$PWD"
-          done
+        run: codebase lint "$PWD"
 YAML
   fi
 

@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+#MISE description="Run configured codebase convention lints"
+#USAGE arg "[target]" default="." help="Path to the target repository"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/codebase-config.sh
+source "$MISE_CONFIG_ROOT/lib/codebase-config.sh"
+
+TARGET_ARG="${usage_target:-.}"
+
+if ! REPO_ROOT=$(codebase_resolve_repo "$TARGET_ARG"); then
+  exit 1
+fi
+
+TOML="$REPO_ROOT/mise.toml"
+if [[ ! -f "$TOML" ]]; then
+  echo "ERROR: no mise.toml found in $REPO_ROOT" >&2
+  exit 1
+fi
+
+RULES=()
+while IFS= read -r rule; do
+  [[ -n "$rule" ]] && RULES+=("$rule")
+done < <(codebase_configured_lint_rules "$REPO_ROOT")
+
+if [[ ${#RULES[@]} -eq 0 ]]; then
+  echo "ERROR: no lint rules configured in $TOML" >&2
+  echo "Add to mise.toml:" >&2
+  echo '  [_.codebase]' >&2
+  echo '  lint = ["mise-settings", "gum-table"]' >&2
+  exit 1
+fi
+
+failures=0
+FAILED=()
+
+for rule in "${RULES[@]}"; do
+  rule_target=$(codebase_target_for_rule "$REPO_ROOT" "$rule")
+  echo "codebase: lint:$rule $rule_target"
+
+  output=""
+  if output=$(mise run -q "lint:$rule" "$rule_target" 2>&1); then
+    status=0
+  else
+    status=$?
+  fi
+
+  if [[ -n "$output" ]]; then
+    printf '%s\n' "$output"
+  fi
+
+  if [[ "$status" -ne 0 ]]; then
+    failures=$((failures + 1))
+    FAILED+=("lint:$rule ($rule_target) exited $status")
+  fi
+done
+
+if [[ "$failures" -gt 0 ]]; then
+  echo "" >&2
+  echo "codebase: $failures lint rule(s) failed" >&2
+  for failed in "${FAILED[@]}"; do
+    echo "  - $failed" >&2
+  done
+  exit 1
+fi
+
+echo "codebase: all ${#RULES[@]} lint rule(s) passed"

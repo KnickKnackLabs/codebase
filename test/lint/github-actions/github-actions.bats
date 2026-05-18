@@ -55,7 +55,7 @@ copy_fixture() {
   grep -q 'run: mise run test' "$workflow"
 }
 
-@test "fix: includes configured codebase lint rules" {
+@test "fix: includes aggregate codebase lint step" {
   target=$(copy_fixture fix-lints)
 
   run codebase lint:github-actions --fix "$target"
@@ -64,9 +64,9 @@ copy_fixture() {
   workflow="$target/.github/workflows/test.yml"
   [ -f "$workflow" ]
   grep -q 'Run codebase lints' "$workflow"
-  grep -q 'lint:mise-settings' "$workflow"
-  grep -q 'lint:shellcheck' "$workflow"
-  grep -q 'codebase "$target" "$PWD"' "$workflow"
+  grep -q 'run: codebase lint "$PWD"' "$workflow"
+  ! grep -q 'lint:mise-settings' "$workflow"
+  ! grep -q 'lint:shellcheck' "$workflow"
 }
 
 @test "fix: provisions codebase CLI when configured lint rules are generated" {

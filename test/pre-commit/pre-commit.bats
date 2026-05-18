@@ -8,6 +8,7 @@ setup() {
   REPO="$BATS_TEST_TMPDIR/repo"
   mkdir -p "$REPO"
   git -C "$REPO" init -q
+  REPO_ROOT="$(git -C "$REPO" rev-parse --show-toplevel)"
   cat > "$REPO/mise.toml" <<'EOF'
 [settings]
 quiet = true
@@ -43,15 +44,12 @@ EOF
   [ -x "$REPO/.git/hooks/pre-commit.d/codebase" ]
 }
 
-@test "install: hook contains configured rules" {
+@test "install: hook delegates to aggregate lint" {
   codebase pre-commit
-  grep -q "mise-settings" "$REPO/.git/hooks/pre-commit.d/codebase"
-  grep -q "gum-table" "$REPO/.git/hooks/pre-commit.d/codebase"
+  grep -q 'exec codebase lint "$REPO_ROOT"' "$REPO/.git/hooks/pre-commit.d/codebase"
 }
 
-@test "install: hook honors user scope overrides" {
-  # Override gum-table's default (.mise/tasks) with a non-default value.
-  # Verifies the user override is actually applied, not masked by the default.
+@test "install: hook does not bake configured rules or scopes" {
   cat > "$REPO/mise.toml" <<'EOF'
 [settings]
 quiet = true
@@ -64,7 +62,9 @@ lint = ["mise-settings", "gum-table"]
 gum-table = "custom/gum-path"
 EOF
   codebase pre-commit
-  grep -q 'custom/gum-path' "$REPO/.git/hooks/pre-commit.d/codebase"
+  grep -q 'exec codebase lint "$REPO_ROOT"' "$REPO/.git/hooks/pre-commit.d/codebase"
+  ! grep -q 'lint:mise-settings' "$REPO/.git/hooks/pre-commit.d/codebase"
+  ! grep -q 'custom/gum-path' "$REPO/.git/hooks/pre-commit.d/codebase"
 }
 
 @test "install: generated hook is syntactically valid bash" {
@@ -72,27 +72,24 @@ EOF
   bash -n "$REPO/.git/hooks/pre-commit.d/codebase"
 }
 
-@test "install: generated hook runs end-to-end against a clean repo" {
-  # Full smoke test: install the hook, actually execute it. Catches
-  # generation bugs the grep-based tests can't.
-  #
-  # Uses mise-settings (expects quiet=true + task_output="interleave"
-  # in the target's mise.toml) as the only lint rule; our fixture
-  # mise.toml satisfies it, so the hook should exit 0.
-  cat > "$REPO/mise.toml" <<'EOF'
-[settings]
-quiet = true
-task_output = "interleave"
-
-[_.codebase]
-lint = ["mise-settings"]
-EOF
+@test "install: generated hook delegates to codebase lint for repo root" {
   codebase pre-commit
+
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  cat > "$BATS_TEST_TMPDIR/bin/codebase" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$CODEBASE_HOOK_ARGS"
+EOF
+  chmod +x "$BATS_TEST_TMPDIR/bin/codebase"
+  export CODEBASE_HOOK_ARGS="$BATS_TEST_TMPDIR/hook-args"
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
 
   # Git always invokes hooks from the repo root. Simulate that —
   # the hook reads REPO_ROOT via 'git rev-parse --show-toplevel'.
-  run bash -c "cd '$REPO' && bash '$REPO/.git/hooks/pre-commit.d/codebase'"
+  run bash -c 'cd "$1" && bash "$1/.git/hooks/pre-commit.d/codebase"' _ "$REPO"
   [ "$status" -eq 0 ]
+  [ "$(sed -n '1p' "$CODEBASE_HOOK_ARGS")" = "lint" ]
+  [ "$(sed -n '2p' "$CODEBASE_HOOK_ARGS")" = "$REPO_ROOT" ]
 }
 
 @test "install: dispatcher is executable" {
@@ -232,7 +229,7 @@ EOF
 # Scope
 # ============================================================================
 
-@test "scope: uses default when no override" {
+@test "scope: default scopes are delegated to aggregate lint" {
   cat > "$REPO/mise.toml" <<'EOF'
 [settings]
 quiet = true
@@ -241,10 +238,11 @@ quiet = true
 lint = ["gum-table"]
 EOF
   codebase pre-commit
-  grep -q '.mise/tasks' "$REPO/.git/hooks/pre-commit.d/codebase"
+  grep -q 'exec codebase lint "$REPO_ROOT"' "$REPO/.git/hooks/pre-commit.d/codebase"
+  ! grep -q '.mise/tasks' "$REPO/.git/hooks/pre-commit.d/codebase"
 }
 
-@test "scope: override takes precedence" {
+@test "scope: overrides are delegated to aggregate lint" {
   cat > "$REPO/mise.toml" <<'EOF'
 [settings]
 quiet = true
@@ -256,7 +254,8 @@ lint = ["gum-table"]
 gum-table = "src/scripts"
 EOF
   codebase pre-commit
-  grep -q 'src/scripts' "$REPO/.git/hooks/pre-commit.d/codebase"
+  grep -q 'exec codebase lint "$REPO_ROOT"' "$REPO/.git/hooks/pre-commit.d/codebase"
+  ! grep -q 'src/scripts' "$REPO/.git/hooks/pre-commit.d/codebase"
 }
 
 # ============================================================================
