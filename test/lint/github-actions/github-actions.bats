@@ -93,6 +93,19 @@ copy_fixture() {
   [ "$(grep -c '^"shiv:codebase" = "latest"' "$target/mise.toml")" -eq 1 ]
 }
 
+@test "fix: updates existing old codebase pin for aggregate workflow" {
+  target=$(copy_fixture fix-lints-provisioned)
+  tmp="$target/mise.toml.tmp"
+  awk '{ gsub(/"latest"/, "\"0.2.0\""); print }' "$target/mise.toml" > "$tmp"
+  mv "$tmp" "$target/mise.toml"
+
+  run codebase lint:github-actions --fix "$target"
+  [ "$status" -eq 0 ]
+
+  grep -q '^"shiv:codebase" = "latest"' "$target/mise.toml"
+  grep -q 'run: codebase lint "$PWD"' "$target/.github/workflows/test.yml"
+}
+
 @test "fix: fails when no safe checks can be inferred" {
   target=$(copy_fixture fix-empty)
 

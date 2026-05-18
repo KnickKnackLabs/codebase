@@ -73,6 +73,7 @@ ensure_codebase_tooling() {
   local target="$1"
   local toml="$target/mise.toml"
   local added=()
+  local tmp
 
   [[ -f "$toml" ]] || return 0
 
@@ -84,6 +85,24 @@ ensure_codebase_tooling() {
   if ! section_has_key "$toml" "tools" '^[[:space:]]*"shiv:codebase"[[:space:]]*='; then
     ensure_section_key "$toml" "tools" '"shiv:codebase" = "latest"'
     added+=("shiv:codebase tool")
+  elif ! awk '
+    /^\[tools\][[:space:]]*$/ { in_tools=1; next }
+    /^\[/ { in_tools=0 }
+    in_tools && /^[[:space:]]*"shiv:codebase"[[:space:]]*=/ && $0 ~ /"latest"/ { found=1 }
+    END { exit found ? 0 : 1 }
+  ' "$toml"; then
+    tmp=$(mktemp)
+    awk '
+      /^\[tools\][[:space:]]*$/ { in_tools=1; print; next }
+      /^\[/ { in_tools=0 }
+      in_tools && /^[[:space:]]*"shiv:codebase"[[:space:]]*=/ {
+        print "\"shiv:codebase\" = \"latest\""
+        next
+      }
+      { print }
+    ' "$toml" > "$tmp"
+    mv "$tmp" "$toml"
+    added+=("shiv:codebase tool -> latest")
   fi
 
   if [[ ${#added[@]} -gt 0 ]]; then
