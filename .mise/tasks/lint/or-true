@@ -1,28 +1,34 @@
 #!/usr/bin/env bash
-#MISE description="Flag '|| true' (and '|| :') as an error-swallowing code smell"
+#MISE description="Classify risky unannotated '|| true' / '|| :' failure suppression"
 #USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+#USAGE example "codebase lint:or-true ." header="Flag unclassified failure suppression"
+#USAGE example "count=$(grep -c needle file || true)  # codebase:ignore or-true — grep -c exits 1 on zero matches" header="Intentional cases need a rule-specific reason"
 
 set -euo pipefail
 
 # shellcheck source=../../../lib/shell-files.sh
 source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
 
-# Rationale: '|| true' silently turns any non-zero exit into success,
-# erasing the signal about whether the failure was expected or not. The
-# canonical replacement is an explicit 'if !' form:
+# Rationale: '|| true' and '|| :' are not automatically wrong, but they
+# silently turn any non-zero exit into success. That is risky when the
+# failure is unexpected, destructive, security-sensitive, or validation-
+# related. This rule keeps failing unclassified suppression while giving
+# category-specific guidance for common intentional cases found in the
+# corpus pilot:
 #
-#     # Bad  — intent unclear
-#     result=$(some_command 2>&1) || true
+#   - arithmetic increments under set -e: prefer '((n += 1))' because
+#     '((n++))' exits 1 when n was 0;
+#   - grep -c zero-match counts: use a rule-specific inline ignore with
+#     the reason, e.g. '# codebase:ignore or-true — grep -c exits 1 on zero matches';
+#   - best-effort cleanup/probes such as kill/diff/optional mise probes:
+#     require a rule-specific inline reason or write explicit handling;
+#   - git/auth/key/commit/deploy/validation commands remain high-risk.
 #
-#     # Good — "I know this may fail, and here's how I handle it"
+# Preferred replacement for real handling:
+#
 #     if ! result=$(some_command 2>&1); then
 #       :  # non-zero expected — result is parsed below
 #     fi
-#
-# Legitimate uses (grep -c counting no matches, pipeline components) can
-# opt out with an inline '# codebase:ignore' comment on the offending
-# line, or a whole-file opt-out via 'codebase:ignore or-true' in the
-# target's mise.toml.
 
 IFS=' ' read -ra TARGETS <<< "${usage_targets}"
 
@@ -35,7 +41,7 @@ fi
 # caller's cwd; without it, relative paths resolve against codebase's
 # own install directory — wrong repo, silent false negatives).
 for i in "${!TARGETS[@]}"; do
-  TARGETS[$i]=$(resolve_target "${TARGETS[$i]}")
+  TARGETS[i]=$(resolve_target "${TARGETS[i]}")
 done
 
 # Patterns (checked independently so we can name them in output):
@@ -53,6 +59,71 @@ done
 TERM='([[:space:]]|$|[;&|)}><])'
 OR_TRUE_RE="\|\|[[:space:]]+true${TERM}"
 OR_COLON_RE="\|\|[[:space:]]*:${TERM}"
+ARITH_INC_RE='\(\([[:space:]]*([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*(\+\+|--)[[:space:]]*\)\)[[:space:]]*\|\|'
+
+has_rule_specific_ignore_reason() {
+  local line="$1"
+  [[ "$line" =~ codebase:ignore[[:space:]]+or-true[[:space:]]+.+ ]]
+}
+
+classify_line() {
+  local line="$1"
+  local lower
+  lower=$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')
+
+  if [[ "$line" == *"codebase:ignore"* ]]; then
+    echo "ignore-needs-reason|inline ignore must be rule-specific and include a reason: '# codebase:ignore or-true — <why this non-zero is expected>'"
+    return
+  fi
+
+  if [[ "$line" =~ $ARITH_INC_RE ]]; then
+    local var="${BASH_REMATCH[1]}"
+    local op="${BASH_REMATCH[2]}"
+    if [[ "$op" == "++" ]]; then
+      echo "arithmetic-increment|use '(( $var += 1 ))' (post-increment exits 1 when the old value is 0 under set -e)"
+    else
+      echo "arithmetic-increment|use '(( $var -= 1 ))' (post-decrement can exit non-zero under set -e)"
+    fi
+    return
+  fi
+
+  if [[ "$lower" == *grep* && "$lower" == *-c* ]]; then
+    echo "count/probe|grep -c exits 1 on zero matches; add '# codebase:ignore or-true — grep -c exits 1 on zero matches' or handle the empty-count path explicitly"
+    return
+  fi
+
+  if [[ "$lower" == kill\ * ]] \
+    || [[ "$lower" == *" kill "* ]] \
+    || [[ "$lower" == diff\ * ]] \
+    || [[ "$lower" == *" diff "* ]] \
+    || [[ "$lower" == *"mise run"* ]] \
+    || [[ "$lower" == command\ -v\ * ]] \
+    || [[ "$lower" == *" command -v "* ]] \
+    || [[ "$lower" == test\ * ]] \
+    || [[ "$lower" == *" test "* ]] \
+    || [[ "$lower" == \[\ * ]] \
+    || [[ "$lower" == *" [ "* ]]; then
+    echo "best-effort/probe|best-effort cleanup/probe needs an inline reason, e.g. '# codebase:ignore or-true — optional probe may fail'"
+    return
+  fi
+
+  if [[ "$lower" == git\ * ]] \
+    || [[ "$lower" == *" git "* ]] \
+    || [[ "$lower" == *" crypt "* ]] \
+    || [[ "$lower" == *" commit "* ]] \
+    || [[ "$lower" == gpg\ * ]] \
+    || [[ "$lower" == *" gpg "* ]] \
+    || [[ "$lower" == curl\ * ]] \
+    || [[ "$lower" == *" curl "* ]] \
+    || [[ "$lower" == *" deploy"* ]] \
+    || [[ "$lower" == *"validate"* ]] \
+    || [[ "$lower" == *"rotate"* ]]; then
+    echo "high-risk|do not silently continue past git/auth/key/commit/deploy/validation failures; handle the error explicitly"
+    return
+  fi
+
+  echo "unclassified|prefer 'if ! cmd; then ...; fi' or add a rule-specific inline reason if the non-zero is expected"
+}
 
 scan_file() {
   local file="$1"
@@ -65,13 +136,20 @@ scan_file() {
     # Skip full-line comments.
     [[ "$line" =~ ^[[:space:]]*# ]] && continue
 
-    # Inline opt-out.
-    [[ "$line" == *"codebase:ignore"* ]] && continue
-
     if [[ "$line" =~ $OR_TRUE_RE ]] || [[ "$line" =~ $OR_COLON_RE ]]; then
+      # Rule-specific ignore with an actual reason is accepted.
+      if has_rule_specific_ignore_reason "$line"; then
+        continue
+      fi
+
       # Trim leading whitespace from the reported line for readability.
       local trimmed="${line#"${line%%[![:space:]]*}"}"
-      echo "$lineno: $trimmed"
+      local classified category message
+      classified=$(classify_line "$line")
+      category="${classified%%|*}"
+      message="${classified#*|}"
+      echo "[$category] $lineno: $trimmed"
+      echo "    hint: $message"
     fi
   done < "$file"
 }
@@ -112,14 +190,17 @@ for target in "${TARGETS[@]}"; do
     while IFS= read -r hit; do
       [[ -z "$hit" ]] && continue
       target_output+="  $rel:$hit"$'\n'
-      hit_count=$((hit_count + 1))
+      if [[ "$hit" == \[*\]* ]]; then
+        hit_count=$((hit_count + 1))
+      fi
     done < <(scan_file "$file")
   done
 
   if [[ "$hit_count" -gt 0 ]]; then
-    echo "FAIL  $name: $hit_count occurrence(s) of '|| true' or '|| :'"
+    echo "FAIL  $name: $hit_count '|| true' / '|| :' suppression(s)"
     printf '%s' "$target_output"
-    echo "  hint: prefer 'if ! cmd; then ...; fi' — or annotate the line with '# codebase:ignore'"
+    echo "  hint: '|| true' is not automatically evil, but it must be classified:"
+    echo "        arithmetic increments should use '((n += 1))'; count/probe and best-effort cleanup need '# codebase:ignore or-true — <reason>'; risky commands need explicit error handling."
     failures=$((failures + 1))
   else
     echo "OK    $name (${#files[@]} file(s) clean)"
