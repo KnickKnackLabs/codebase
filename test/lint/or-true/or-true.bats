@@ -36,10 +36,10 @@ setup() {
   [[ "$output" == *"||:"* ]]
 }
 
-@test "or-true: fail output names seven occurrences in the dirty fixture" {
+@test "or-true: fail output names seven suppressions in the dirty fixture" {
   run codebase lint:or-true "$FIXTURES/dirty"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"7 occurrence"* ]]
+  [[ "$output" == *"7 '|| true' / '|| :' suppression"* ]]
 }
 
 @test "or-true: flags '|| true>file' (redirect terminator)" {
@@ -77,10 +77,107 @@ setup() {
 }
 
 # ============================================================================
+# Corpus-calibrated diagnostics
+# ============================================================================
+
+@test "or-true: arithmetic increments get a safer arithmetic suggestion" {
+  local tmp
+  tmp=$(mktemp -d)
+  mkdir -p "$tmp/.mise/tasks"
+  cat > "$tmp/.mise/tasks/count" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+modified=0
+((modified++)) || true
+EOF
+
+  run codebase lint:or-true "$tmp"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"[arithmetic-increment]"* ]]
+  [[ "$output" == *"(( modified += 1 ))"* ]]
+  rm -rf "$tmp"
+}
+
+@test "or-true: grep count/probe commands get zero-match guidance" {
+  local tmp
+  tmp=$(mktemp -d)
+  mkdir -p "$tmp/.mise/tasks"
+  cat > "$tmp/.mise/tasks/count" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+count=$(printf '%s\n' "$output" | grep -cE '^ok' || true)
+EOF
+
+  run codebase lint:or-true "$tmp"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"[count/probe]"* ]]
+  [[ "$output" == *"grep -c exits 1 on zero matches"* ]]
+  rm -rf "$tmp"
+}
+
+@test "or-true: best-effort cleanup/probe commands require an inline reason" {
+  local tmp
+  tmp=$(mktemp -d)
+  mkdir -p "$tmp/.mise/tasks"
+  cat > "$tmp/.mise/tasks/cleanup" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+kill "$PID" 2>/dev/null || true
+EOF
+
+  run codebase lint:or-true "$tmp"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"[best-effort/probe]"* ]]
+  [[ "$output" == *"best-effort cleanup/probe needs an inline reason"* ]]
+  rm -rf "$tmp"
+}
+
+@test "or-true: risky key/git suppression stays high-risk" {
+  local tmp
+  tmp=$(mktemp -d)
+  mkdir -p "$tmp/.mise/tasks"
+  cat > "$tmp/.mise/tasks/rotate-key" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+git -C "$TARGET" crypt unlock 2>/dev/null || true
+EOF
+
+  run codebase lint:or-true "$tmp"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"[high-risk]"* ]]
+  [[ "$output" == *"git/auth/key/commit"* ]]
+  rm -rf "$tmp"
+}
+
+@test "or-true: generic inline ignore without rule and reason is not enough" {
+  local tmp
+  tmp=$(mktemp -d)
+  mkdir -p "$tmp/.mise/tasks"
+  cat > "$tmp/.mise/tasks/count" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+count=$(grep -c needle file || true)  # codebase:ignore
+EOF
+
+  run codebase lint:or-true "$tmp"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"[ignore-needs-reason]"* ]]
+  [[ "$output" == *"codebase:ignore or-true"* ]]
+  rm -rf "$tmp"
+}
+
+@test "or-true: help output explains classification and explicit reasons" {
+  run bash -c 'cd "$REPO_DIR" && mise tasks info lint:or-true'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Classify risky unannotated"* ]]
+  [[ "$output" == *"Intentional cases need a rule-specific reason"* ]]
+}
+
+# ============================================================================
 # Ignore directives
 # ============================================================================
 
-@test "or-true: inline '# codebase:ignore' skips the line" {
+@test "or-true: inline '# codebase:ignore or-true — reason' skips the line" {
   run codebase lint:or-true "$FIXTURES/ignored-inline"
   [ "$status" -eq 0 ]
   [[ "$output" == *"OK"*"ignored-inline"* ]]
