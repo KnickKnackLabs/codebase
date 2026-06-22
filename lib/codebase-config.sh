@@ -130,19 +130,29 @@ codebase_scope_for_rule() {
   codebase_default_scope_for_rule "$rule"
 }
 
-# codebase_target_for_rule <repo-root> <rule>
+# codebase_targets_for_rule <repo-root> <rule>
 #
-# Emit the concrete target path for a rule after scope resolution.
-codebase_target_for_rule() {
+# Emit the concrete target path(s) for a rule after scope resolution.
+# When the scope value is a space-separated list of paths (from TOML string
+# values like or-true = ".mise/tasks lib"), emits one line per target.
+codebase_targets_for_rule() {
   local repo_root="$1"
   local rule="$2"
-  local scope
+  local scope token
 
   scope=$(codebase_scope_for_rule "$repo_root" "$rule")
 
+  # Handle empty/dot scope — single target: the repo root itself.
   case "$scope" in
-    ""|".") printf '%s\n' "$repo_root" ;;
-    /*) printf '%s\n' "$scope" ;;
-    *) printf '%s/%s\n' "$repo_root" "$scope" ;;
+    ""|".") printf '%s\n' "$repo_root"; return 0 ;;
   esac
+
+  # Split scope on whitespace into individual path tokens and resolve each.
+  # This supports multi-path scopes like ".mise/tasks lib" from TOML.
+  for token in $scope; do
+    case "$token" in
+      /*) printf '%s\n' "$token" ;;
+      *) printf '%s/%s\n' "$repo_root" "$token" ;;
+    esac
+  done
 }

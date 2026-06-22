@@ -182,6 +182,44 @@ EOF
   [[ "$output" == *"no lint rules configured"* ]]
 }
 
+@test "lint: honors multi-path scope (space-separated targets)" {
+  write_config <<'EOF'
+[settings]
+quiet = true
+task_output = "interleave"
+
+[_.codebase]
+lint = ["gum-table"]
+
+[_.codebase.scope]
+gum-table = ".mise/tasks scripts"
+EOF
+
+  # Create a dirty file in .mise/tasks/ (printf inside loop = WARN)
+  write_clean_task
+  cat > "$REPO/.mise/tasks/build" <<'SCRIPT'
+#!/usr/bin/env bash
+while read -r item; do
+  printf "%-10s %s\n" "$item" ok
+done < input
+SCRIPT
+
+  # Create a dirty file in scripts/ (printf padding = INFO, not a WARN)
+  mkdir -p "$REPO/scripts"
+  cat > "$REPO/scripts/deploy" <<'SCRIPT'
+#!/usr/bin/env bash
+printf "%-20s %s\n" "$1" "$2"
+SCRIPT
+
+  run codebase lint "$REPO"
+  # gum-table fails on .mise/tasks/build (loop-table WARN)
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/.mise/tasks"* ]]
+  [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/scripts"* ]]
+  [[ "$output" == *"WARN"*"tasks:build"* ]]
+  [[ "$output" == *"scripts:deploy"* ]]
+}
+
 @test "lint: parses multiline lint arrays" {
   write_config <<'EOF'
 [settings]
