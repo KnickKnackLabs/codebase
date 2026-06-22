@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+"$CODEBASE_BIN" lint "$PWD"
+# ... run other tests

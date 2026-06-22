@@ -1,0 +1,14 @@
+name: Test
+on:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up mise
+        uses: jdx/mise-action@v4
+      - name: Run codebase lints
+        run: codebase lint "$PWD"
+      - name: Run tests
+        run: mise run test
