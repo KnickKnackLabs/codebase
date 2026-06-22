@@ -36,24 +36,31 @@ failures=0
 FAILED=()
 
 for rule in "${RULES[@]}"; do
-  rule_target=$(codebase_target_for_rule "$REPO_ROOT" "$rule")
-  echo "codebase: lint:$rule $rule_target"
+  # Collect all targets for this rule (supports multi-path scopes)
+  TARGETS=()
+  while IFS= read -r t; do
+    [[ -n "$t" ]] && TARGETS+=("$t")
+  done < <(codebase_targets_for_rule "$REPO_ROOT" "$rule")
 
-  output=""
-  if output=$(mise run -q "lint:$rule" "$rule_target" 2>&1); then
-    status=0
-  else
-    status=$?
-  fi
+  for rule_target in "${TARGETS[@]}"; do
+    echo "codebase: lint:$rule $rule_target"
 
-  if [[ -n "$output" ]]; then
-    printf '%s\n' "$output"
-  fi
+    output=""
+    if output=$(mise run -q "lint:$rule" "$rule_target" 2>&1); then
+      status=0
+    else
+      status=$?
+    fi
 
-  if [[ "$status" -ne 0 ]]; then
-    failures=$((failures + 1))
-    FAILED+=("lint:$rule ($rule_target) exited $status")
-  fi
+    if [[ -n "$output" ]]; then
+      printf '%s\n' "$output"
+    fi
+
+    if [[ "$status" -ne 0 ]]; then
+      failures=$((failures + 1))
+      FAILED+=("lint:$rule ($rule_target) exited $status")
+    fi
+  done
 done
 
 if [[ "$failures" -gt 0 ]]; then
