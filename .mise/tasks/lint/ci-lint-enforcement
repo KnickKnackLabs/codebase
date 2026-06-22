@@ -1,0 +1,386 @@
+#!/usr/bin/env bash
+#MISE description="Require configured codebase lints to run in CI"
+#USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+#USAGE flag "--fix" help="Add aggregate codebase lint enforcement step to existing workflow"
+#USAGE example "codebase lint:ci-lint-enforcement ." header="Check repos enforce their lint portfolio in CI"
+#USAGE example "codebase lint:ci-lint-enforcement --fix ." header="Add aggregate lint enforcement to primary workflow"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/shell-files.sh
+source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
+# shellcheck source=../../../lib/codebase-config.sh
+source "$MISE_CONFIG_ROOT/lib/codebase-config.sh"
+
+FIX="${usage_fix:-false}"
+
+IFS=' ' read -ra TARGETS <<< "${usage_targets}"
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+  echo "ERROR: at least one target is required" >&2
+  exit 1
+fi
+
+for i in "${!TARGETS[@]}"; do
+  TARGETS[i]=$(resolve_target "${TARGETS[i]}")
+done
+
+# ── detection patterns ──────────────────────────────────────────────────────
+
+# Direct aggregate enforcement: codebase lint invoked directly in a workflow step
+DIRECT_PATTERNS=(
+  'codebase lint "$PWD"'
+  'codebase lint .'
+  'codebase lint \$PWD'
+)
+
+# Mise exec indirection: codebase lint invoked via mise exec
+EXEC_PATTERNS=(
+  'mise exec.*codebase lint'
+)
+
+# Local task delegation: workflows that run a local test/CI task that may
+# itself invoke codebase lint. We trace into the task file to confirm.
+TEST_TASK_PATTERNS=(
+  'mise run test'
+  'mise run ci'
+  'mise run check'
+)
+
+# Hard-coded per-rule loop pattern (e.g. codebase lint:mise-settings "$PWD")
+# These bypass the configured aggregate and are drift-prone.
+PER_RULE_PATTERN='codebase lint:[a-zA-Z0-9_-]+'
+
+# ── helpers ─────────────────────────────────────────────────────────────────
+
+collect_workflows() {
+  local target="$1"
+  local workflows_dir="$target/.github/workflows"
+  [[ -d "$workflows_dir" ]] || return 0
+  find "$workflows_dir" -type f \( -name "*.yml" -o -name "*.yaml" \) 2>/dev/null | LC_ALL=C sort
+}
+
+# Strip leading whitespace from a string.
+strip_leading_space() {
+  printf '%s' "$1" | sed 's/^[[:space:]]*//'
+}
+
+# Check if a trimmed YAML line contains an aggregate enforcement pattern.
+line_has_aggregate_lint() {
+  local trimmed="$1"
+  local pattern
+
+  for pattern in "${DIRECT_PATTERNS[@]}"; do
+    if [[ "$trimmed" == *"$pattern"* ]]; then
+      return 0
+    fi
+  done
+
+  for pattern in "${EXEC_PATTERNS[@]}"; do
+    if [[ "$trimmed" =~ $pattern ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+# Discover aggregate enforcement by scanning workflow YAML lines.
+workflow_has_aggregate_lint() {
+  local workflow="$1"
+  local trimmed
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed=$(strip_leading_space "$line")
+    [[ -z "$trimmed" || "$trimmed" == '#'* ]] && continue
+    if line_has_aggregate_lint "$trimmed"; then
+      return 0
+    fi
+  done < "$workflow"
+
+  return 1
+}
+
+# Check if a workflow runs a local task that delegates to codebase lint.
+workflow_runs_lint_delegating_task() {
+  local workflow="$1"
+  local target="$2"
+  local trimmed task_name
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed=$(strip_leading_space "$line")
+    [[ -z "$trimmed" || "$trimmed" == '#'* ]] && continue
+
+    for pattern in "${TEST_TASK_PATTERNS[@]}"; do
+      if [[ "$trimmed" == *"$pattern"* ]]; then
+        # Extract the task name from 'mise run <task>'
+        task_name=$(printf '%s' "$trimmed" | sed -n 's/.*mise run \([a-zA-Z0-9_-]\+\).*/\1/p')
+        [[ -z "$task_name" ]] && continue
+
+        if task_invokes_codebase_lint "$target" "$task_name"; then
+          return 0
+        fi
+      fi
+    done
+  done < "$workflow"
+
+  return 1
+}
+
+
+# Check if a local mise task file invokes codebase lint.
+task_invokes_codebase_lint() {
+  local target="$1"
+  local task_name="$2"
+  local candidate
+
+  for candidate in "$target/.mise/tasks/$task_name" "$target/.mise/tasks/$task_name/_default"; do
+    if [[ -f "$candidate" ]] && grep -qE 'codebase lint|CODEBASE_BIN.*lint' "$candidate" 2>/dev/null; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+# Check if any workflow uses hard-coded per-rule loops.
+workflow_has_per_rule_loop() {
+  local workflow="$1"
+  [[ $(grep -cE "$PER_RULE_PATTERN" "$workflow" 2>/dev/null || true) -gt 0 ]]
+}
+
+# Count the number of per-rule invocations across all workflows.
+count_per_rule_loops() {
+  local workflows=("$@")
+  local total=0 wf
+  for wf in "${workflows[@]}"; do
+    total=$((total + $(grep -cE "$PER_RULE_PATTERN" "$wf" 2>/dev/null || true)))
+  done
+  printf '%s' "$total"
+}
+
+# ── --fix helpers ───────────────────────────────────────────────────────────
+
+ensure_codebase_tooling() {
+  local target="$1"
+  local toml="$target/mise.toml"
+  local added=()
+  local tmp
+
+  [[ -f "$toml" ]] || return 0
+
+  # Ensure [plugins] section has shiv plugin
+  if ! grep -q '^shiv = "https://github.com/KnickKnackLabs/vfox-shiv"' "$toml" 2>/dev/null; then
+    if grep -q '^\[plugins\]' "$toml" 2>/dev/null; then
+      tmp=$(mktemp)
+      awk '/^\[plugins\]/ { print; if (!printed) { print "shiv = \"https://github.com/KnickKnackLabs/vfox-shiv\""; printed=1; next } } 1' "$toml" > "$tmp"
+      mv "$tmp" "$toml"
+    else
+      printf '\n[plugins]\nshiv = "https://github.com/KnickKnackLabs/vfox-shiv"\n' >> "$toml"
+    fi
+    added+=("shiv plugin")
+  fi
+
+  # Ensure [tools] section has shiv:codebase
+  if ! grep -q '"shiv:codebase"' "$toml" 2>/dev/null; then
+    if grep -q '^\[tools\]' "$toml" 2>/dev/null; then
+      tmp=$(mktemp)
+      awk '/^\[tools\]/ { print; if (!printed) { print "\"shiv:codebase\" = \"latest\""; printed=1; next } } 1' "$toml" > "$tmp"
+      mv "$tmp" "$toml"
+    else
+      printf '\n[tools]\n"shiv:codebase" = "latest"\n' >> "$toml"
+    fi
+    added+=("shiv:codebase tool")
+  fi
+
+  if [[ ${#added[@]} -gt 0 ]]; then
+    echo "FIX   $(basename "$target"): provisioned ${added[*]}"
+  fi
+}
+
+# Add a standard aggregate lint step to the primary workflow.
+add_lint_step_to_workflow() {
+  local target="$1"
+  local workflow="$2"
+  local tmp existing_has_lint
+
+  # Skip if the workflow already has aggregate enforcement in any job.
+  existing_has_lint=false
+  while IFS= read -r line; do
+    trimmed=$(strip_leading_space "$line")
+    if line_has_aggregate_lint "$trimmed"; then
+      existing_has_lint=true
+      break
+    fi
+  done < "$workflow"
+
+  if $existing_has_lint; then
+    return 0
+  fi
+
+  # Find the last steps: block and insert before its last step.
+  tmp=$(mktemp)
+  awk '
+    BEGIN { in_steps = 0; last_step = ""; inserted = 0 }
+
+    # Detect start of a steps: block
+    /^[[:space:]]*steps:[[:space:]]*$/ {
+      in_steps = 1
+      last_step = ""
+      print
+      next
+    }
+
+    # Track the last step entry inside a steps block
+    in_steps && /^[[:space:]]*- name:/ {
+      if (last_step != "") print last_step
+      last_step = $0
+      next
+    }
+
+    in_steps && /^[[:space:]]*- run:/ {
+      if (last_step != "") print last_step
+      last_step = $0
+      next
+    }
+
+    # Outdent back to a non-step key ends the steps block
+    in_steps && /^[a-zA-Z]/ && !/^[[:space:]]*- / && last_step != "" {
+      # Insert our step before the last tracked step
+      print "      - name: Run codebase lints"
+      print "        run: codebase lint \"$PWD\""
+      inserted = 1
+      print last_step
+      last_step = ""
+      in_steps = 0
+      print
+      next
+    }
+
+    # End of file: flush last step and insert
+    {
+      print
+    }
+
+    END {
+      if (!inserted && last_step != "") {
+        print "      - name: Run codebase lints"
+        print "        run: codebase lint \"$PWD\""
+        print last_step
+      }
+    }
+  ' "$workflow" > "$tmp"
+  mv "$tmp" "$workflow"
+
+  echo "FIXED $(basename "$target"): added aggregate codebase lint step to $(basename "$workflow")"
+}
+
+# ── main ────────────────────────────────────────────────────────────────────
+
+failures=0
+FIXED_REPOS=()
+
+for target in "${TARGETS[@]}"; do
+  if [[ ! -e "$target" ]]; then
+    echo "ERROR: target does not exist: $target" >&2
+    exit 1
+  fi
+
+  name=$(basename "$target")
+  toml="$target/mise.toml"
+
+  # File-level ignore
+  if [[ -f "$toml" ]] && grep -m1 -q 'codebase:ignore ci-lint-enforcement' "$toml" 2>/dev/null; then
+    echo "SKIP  $name (codebase:ignore)"
+    continue
+  fi
+
+  # Read configured lint rules
+  RULES=()
+  while IFS= read -r rule; do
+    [[ -n "$rule" ]] && RULES+=("$rule")
+  done < <(codebase_configured_lint_rules "$target")
+
+  # No lint config → nothing to enforce
+  if [[ ${#RULES[@]} -eq 0 ]]; then
+    echo "SKIP  $name (no [_.codebase].lint configured)"
+    continue
+  fi
+
+  # Collect workflows
+  workflows=()
+  while IFS= read -r wf; do
+    [[ -n "$wf" ]] && workflows+=("$wf")
+  done < <(collect_workflows "$target")
+
+  # No workflows at all → enforcement not possible
+  if [[ ${#workflows[@]} -eq 0 ]]; then
+    echo "FAIL  $name: lint configured but no CI workflows found"
+    echo "  hint: run 'codebase lint:github-actions --fix $target' to create a default workflow"
+    failures=$((failures + 1))
+    continue
+  fi
+
+  # Check enforcement across all workflows
+  found_enforcement=false
+  found_per_rule_loop=false
+
+  for wf in "${workflows[@]}"; do
+    if workflow_has_aggregate_lint "$wf"; then
+      found_enforcement=true
+    fi
+
+    # Check indirect delegation (mise run test → tasks/test → codebase lint)
+    if workflow_runs_lint_delegating_task "$wf" "$target"; then
+      found_enforcement=true
+    fi
+
+    # Check for hard-coded per-rule loops (warn, not fail)
+    if workflow_has_per_rule_loop "$wf"; then
+      found_per_rule_loop=true
+    fi
+  done
+
+  if $found_enforcement; then
+    if $found_per_rule_loop; then
+      loop_count=$(count_per_rule_loops "${workflows[@]}")
+      echo "WARN  $name: aggregate lint enforced but $loop_count per-rule invocation(s) detected (drift-prone)"
+    else
+      echo "OK    $name (${#RULES[@]} rule(s) enforced in ${#workflows[@]} workflow(s))"
+    fi
+    continue
+  fi
+
+  # ── --fix mode ────────────────────────────────────────────────────────
+  if [[ "$FIX" == "true" ]]; then
+    # Provision codebase tooling if missing
+    ensure_codebase_tooling "$target"
+
+    # Add enforcement step to the primary workflow
+    primary="${workflows[0]}"
+    add_lint_step_to_workflow "$target" "$primary"
+
+    if $found_per_rule_loop; then
+      loop_count=$(count_per_rule_loops "${workflows[@]}")
+      echo "WARN  $name: aggregate step added but $loop_count per-rule loop(s) remain (review manually)"
+    fi
+
+    FIXED_REPOS+=("$name")
+    continue
+  fi
+
+  # ── fail ──────────────────────────────────────────────────────────────
+  echo "FAIL  $name: lint configured but no aggregate enforcement in CI"
+  if $found_per_rule_loop; then
+    loop_count=$(count_per_rule_loops "${workflows[@]}")
+    echo "  detail: $loop_count hard-coded per-rule invocation(s) found — these bypass the configured aggregate"
+  fi
+  echo "  hint: add 'run: codebase lint \"\$PWD\"' to your CI workflow, or run with --fix"
+  failures=$((failures + 1))
+done
+
+if [[ ${#FIXED_REPOS[@]} -gt 0 ]]; then
+  echo "FIXED: ${FIXED_REPOS[*]}"
+fi
+
+exit "$failures"

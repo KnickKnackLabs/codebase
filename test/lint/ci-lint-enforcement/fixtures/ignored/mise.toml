@@ -1,0 +1,7 @@
+# codebase:ignore ci-lint-enforcement — repo handles lint differently
+
+[settings]
+quiet = true
+
+[_.codebase]
+lint = ["mise-settings"]

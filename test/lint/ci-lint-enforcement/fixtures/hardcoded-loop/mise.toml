@@ -1,0 +1,5 @@
+[settings]
+quiet = true
+
+[_.codebase]
+lint = ["mise-settings", "shellcheck", "gum-table"]
