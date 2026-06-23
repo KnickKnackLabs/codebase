@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# No set -u — should NOT be flagged
+cmd "${args[@]}"
+echo "${items[*]}"

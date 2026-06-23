@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+items=("a" "b" "c")
+local copy=("${items[@]}")
+for item in "${copy[@]}"; do
+  echo "$item"
+done

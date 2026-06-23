@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+names=()
+paths=()
+flags=()
+
+echo "${names[@]}"
+echo "${paths[@]}"
+echo "${flags[*]}"

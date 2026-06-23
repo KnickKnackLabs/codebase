@@ -77,7 +77,7 @@ for target in "${TARGETS[@]}"; do
     while IFS= read -r line || [[ -n "$line" ]]; do
       printf '%s\n' "$line" >> "$tmp"
       if ! $inserted && [[ "$line" =~ ^\[settings\] ]]; then
-        printf '%s\n' "${missing[@]}" >> "$tmp"
+        printf '%s\n' "${missing[@]}" >> "$tmp"  # codebase:ignore bash-empty-array-expansions -- guarded: missing is non-empty here
         inserted=true
       fi
     done < "$toml"

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+args=()
+cmd ${args[@]+"${args[@]}"}
+cmd ${args[*]+"${args[*]}"}
+echo done
