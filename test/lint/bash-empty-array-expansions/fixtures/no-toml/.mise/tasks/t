@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# No mise.toml — should still scan gracefully
+# No nounset, so no risk of unbound variable
+echo "hello"

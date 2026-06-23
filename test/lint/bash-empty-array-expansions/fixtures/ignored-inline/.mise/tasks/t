@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+args=()
+cmd "${args[@]}"  # codebase:ignore bash-empty-array-expansions -- test fixture
+echo done

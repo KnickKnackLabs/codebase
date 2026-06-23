@@ -69,7 +69,7 @@ for target in "${TARGETS[@]}"; do
   # behavior for .mise/tasks files while letting POSIX-sh / dash /
   # ksh scripts in bin/, scripts/, etc. be checked with the correct
   # dialect.
-  if ! violations=$(shellcheck --exclude="$DEFAULT_EXCLUDES" "${files[@]}" 2>&1); then
+  if ! violations=$(shellcheck --exclude="$DEFAULT_EXCLUDES" "${files[@]}" 2>&1); then  # codebase:ignore bash-empty-array-expansions -- guard ensures files non-empty
     count=$(printf '%s\n' "$violations" | grep -cE '^In .* line [0-9]+:' || true)  # codebase:ignore or-true — grep -c exits 1 on zero matches
     echo "FAIL  $name: $count violation(s)"
     printf '%s\n' "$violations" | sed 's/^/  /'

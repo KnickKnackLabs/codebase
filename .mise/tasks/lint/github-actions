@@ -222,7 +222,7 @@ for target in "${TARGETS[@]}"; do
     fi
   fi
 
-  if ! output=$(actionlint "${workflows[@]}" 2>&1); then
+  if ! output=$(actionlint "${workflows[@]}" 2>&1); then  # codebase:ignore bash-empty-array-expansions -- guard ensures workflows non-empty
     count=$(printf '%s\n' "$output" | grep -cE '^[^:]+:[0-9]+:[0-9]+:' || true)  # codebase:ignore or-true — grep -c exits 1 on zero matches
     [[ "$count" -eq 0 ]] && count=1
     echo "FAIL  $name: $count GitHub Actions violation(s)"

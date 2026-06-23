@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+no_nounset_here=true
+cmd "${args[@]}"
+echo done
