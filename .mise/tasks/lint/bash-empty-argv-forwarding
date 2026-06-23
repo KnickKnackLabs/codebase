@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+#MISE description="Flag direct empty-argv forwarding under nounset (macOS Bash 3.2 compat)"
+#USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+#USAGE example "codebase lint:bash-empty-argv-forwarding ."
+#USAGE example "codebase lint:bash-empty-argv-forwarding /path/to/repo"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/shell-files.sh
+source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
+
+# Rationale: 'cmd "$@"' and 'cmd "${@}"' under nounset (set -u) fail on
+# macOS Bash 3.2 when the argument list is empty. Bash 5+ and Homebrew
+# Bash handle it gracefully, creating a silent cross-platform gotcha.
+# ShellCheck does not catch this.
+#
+# Safe form on all Bash versions:
+#   cmd ${@+"$@"}
+#
+# Contexts that are safe and NOT flagged:
+#   - 'for arg in "$@"' — Bash handles empty $@ in for loops gracefully
+#   - 'local arr=("$@")' — array assignment handles empty $@
+#   - Files without nounset (set -u / set -eu / set -euo pipefail) — no risk
+#   - Already-safe forms using alternate-value: ${@+"$@"}
+#   - Lines with inline 'codebase:ignore bash-empty-argv-forwarding'
+
+IFS=' ' read -ra TARGETS <<< "${usage_targets}"
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+  echo "ERROR: at least one target is required" >&2
+  exit 1
+fi
+
+# Resolve relative paths against CALLER_PWD (see lib/shell-files.sh).
+for i in "${!TARGETS[@]}"; do
+  TARGETS[i]=$(resolve_target "${TARGETS[i]}")
+done
+
+# ── Helpers ──────────────────────────────────────────────────────────────
+
+# has_nounset <file>
+# Returns 0 if the file enables nounset via any form:
+#   set -u, set -eu, set -euo pipefail, set -o nounset, etc.
+has_nounset() {
+  local file="$1"
+  rg -q '^[^#]*set\s+(-[a-z]*u[a-z]*|-o\s+nounset\b)' "$file" 2>/dev/null
+}
+
+# is_safe_context <line>
+# Returns 0 if the line uses "$@" in a context that is safe under nounset.
+# Safe contexts: for arg in "$@", local arr=("$@"), readonly arr=("$@")
+is_safe_context() {
+  local line="$1"
+  # for arg in "$@"
+  [[ "$line" =~ ^[[:space:]]*for\ [a-zA-Z_][a-zA-Z0-9_]*\ in\ \"\$ ]] && return 0
+  # local arr=("$@"), readonly arr=("$@"), declare arr=("$@"), typeset arr=("$@")
+  [[ "$line" =~ ^[[:space:]]*(local|readonly|declare|typeset)[[:space:]]+[a-zA-Z_][a-zA-Z0-9_]*=\(\"\$ ]] && return 0
+  return 1
+}
+
+# has_safe_form <line>
+# Returns 0 if the line already uses the alternate-value safe form.
+has_safe_form() {
+  local line="$1"
+  [[ "$line" == *'${@+"$@"}'* ]] && return 0
+  [[ "$line" == *'${@+"${@}"}'* ]] && return 0
+  return 1
+}
+
+# Pattern: "$@" or "${@}" in double quotes
+ARGV_FORWARD_RE='"\$\{?@\}?"'
+
+# has_line_ignore <line>
+# Returns 0 if the line has a rule-specific inline ignore.
+has_line_ignore() {
+  local line="$1"
+  [[ "$line" =~ codebase:ignore[[:space:]]+bash-empty-argv-forwarding ]]
+}
+
+# scan_file <file>
+# Emit flagged line numbers and trimmed content for lines matching the
+# empty-argv forwarding pattern in a nounset file.
+scan_file() {
+  local file="$1"
+  local lineno=0
+  local line
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    lineno=$((lineno + 1))
+
+    # Skip full-line comments.
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+
+    # Rule-specific inline ignore with reason is accepted.
+    has_line_ignore "$line" && continue
+
+    # Safe contexts (for loops, array assignments) are accepted.
+    is_safe_context "$line" && continue
+
+    # Already-safe forms are accepted.
+    has_safe_form "$line" && continue
+
+    # Flag matching lines.
+    if [[ "$line" =~ $ARGV_FORWARD_RE ]]; then
+      local trimmed="${line#"${line%%[![:space:]]*}"}"
+      echo "$lineno: $trimmed"
+    fi
+  done < "$file"
+}
+
+# ── Main ──────────────────────────────────────────────────────────────────
+
+failures=0
+
+for target in "${TARGETS[@]}"; do
+  if [[ ! -e "$target" ]]; then
+    echo "ERROR: target does not exist: $target" >&2
+    exit 1
+  fi
+
+  name=$(basename "$target")
+
+  # File-level ignore via mise.toml
+  toml="$target/mise.toml"
+  if [[ -f "$toml" ]] && grep -m1 -q 'codebase:ignore bash-empty-argv-forwarding' "$toml"; then
+    echo "SKIP  $name (codebase:ignore)"
+    continue
+  fi
+
+  # Collect shell files
+  files=()
+  while IFS= read -r f; do
+    [[ -n "$f" ]] && files+=("$f")
+  done < <(discover_shell_files "$target")
+
+  if [[ ${#files[@]} -eq 0 ]]; then
+    echo "OK    $name (no shell files found)"
+    continue
+  fi
+
+  # Scan each file that has nounset enabled; collect hits
+  hit_count=0
+  target_output=""
+  for file in "${files[@]}"; do
+    # Skip files without nounset — no risk of unbound variable
+    has_nounset "$file" || continue
+
+    rel="${file#"$target"/}"
+    while IFS= read -r hit; do
+      [[ -z "$hit" ]] && continue
+      target_output+="  $rel:$hit"$'\n'
+      hit_count=$((hit_count + 1))
+    done < <(scan_file "$file")
+  done
+
+  if [[ "$hit_count" -gt 0 ]]; then
+    echo "FAIL  $name: $hit_count empty-argv forwarding under nounset"
+    printf '%s' "$target_output"
+    cat <<'HINT'
+  hint: Use ${@+"$@"} instead of "$@" for Bash-3-safe empty-argv forwarding
+HINT
+    failures=$((failures + 1))
+  else
+    echo "OK    $name (${#files[@]} file(s) clean)"
+  fi
+done
+
+exit "$failures"

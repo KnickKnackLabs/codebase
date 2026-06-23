@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# No set -u here — this is safe on all platforms
+mise run child "$@"
