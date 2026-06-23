@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+#MISE description="Flag setup_suite.bash that calls mise env without preserving BATS_LIBEXEC"
+#USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+#USAGE example "codebase lint:bats-setup-suite-path ." header="Flag repos with unprotected mise env in setup_suite"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/shell-files.sh
+source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
+
+# Rationale: BATS 1.13.0 looks up bats-exec-file, bats-format-*,
+# etc. by bare name from files under its libexec dir. If
+# test/setup_suite.bash calls `mise env` (which rewrites PATH to
+# include tool-manager shims), Bats' libexec directory can fall
+# off PATH, and the suite fails before running any tests:
+#
+#   bats-exec-suite: line 323: bats-exec-file: command not found
+#   # bats warning: Executed 0 instead of expected N tests
+#
+# The safe shape saves BATS_LIBEXEC before mise env and prepends
+# it afterward:
+#
+#   setup_suite() {
+#     REPO_DIR="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
+#     export REPO_DIR
+#     bats_libexec="${BATS_LIBEXEC:-}"
+#     eval "$(cd "$REPO_DIR" && mise env)"
+#     if [ -n "$bats_libexec" ]; then
+#       export PATH="$bats_libexec:$PATH"
+#     fi
+#   }
+#
+# When upstream Bats releases a fix (bats-core/bats-core#1209)
+# and KKL repos move past Bats 1.13.0, this rule may become less
+# necessary.
+
+SETUP_SUITE="test/setup_suite.bash"
+
+IFS=' ' read -ra TARGETS <<< "${usage_targets}"
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+  echo "ERROR: at least one target is required" >&2
+  exit 1
+fi
+
+# Resolve relative paths against CALLER_PWD (see lib/shell-files.sh).
+for i in "${!TARGETS[@]}"; do
+  TARGETS[i]=$(resolve_target "${TARGETS[i]}")
+done
+
+failures=0
+
+for target in "${TARGETS[@]}"; do
+  if [[ ! -e "$target" ]]; then
+    echo "ERROR: target does not exist: $target" >&2
+    exit 1
+  fi
+
+  name=$(basename "$target")
+
+  # Repo-level ignore via mise.toml
+  toml="$target/mise.toml"
+  if [[ -f "$toml" ]] && rg -q 'codebase:ignore bats-setup-suite-path' "$toml"; then
+    echo "SKIP  $name (codebase:ignore)"
+    continue
+  fi
+
+  suite="$target/$SETUP_SUITE"
+  if [[ ! -f "$suite" ]]; then
+    echo "OK    $name (no $SETUP_SUITE -- nothing to check)"
+    continue
+  fi
+
+  # Inline ignore
+  if rg -q 'codebase:ignore bats-setup-suite-path' "$suite"; then
+    echo "SKIP  $name (inline codebase:ignore)"
+    continue
+  fi
+
+  # Check: does the file call `mise env`?
+  if ! rg -q 'mise env' "$suite"; then
+    echo "OK    $name ($SETUP_SUITE doesn't call mise env -- nothing to check)"
+    continue
+  fi
+
+  # Check: is BATS_LIBEXEC preserved before the mise env call?
+  # Walk through the file top-to-bottom. If any `mise env` line appears
+  # without a preceding BATS_LIBEXEC capture, flag it.
+  bats_preserved=false
+  found_offense=false
+
+  while IFS= read -r line; do
+    # Skip comments
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+
+    # Detect BATS_LIBEXEC capture (any assignment reading BATS_LIBEXEC)
+    if grep -q 'BATS_LIBEXEC' <<< "$line"; then
+      bats_preserved=true
+    fi
+
+    # Detect `mise env` invocation
+    if grep -q 'mise env' <<< "$line"; then
+      if [[ "$bats_preserved" == false ]]; then
+        echo "FAIL  $name (mise env without BATS_LIBEXEC preservation in $SETUP_SUITE)"
+        echo "  hint: save BATS_LIBEXEC before mise env and prepend it afterward:"
+        # shellcheck disable=SC2016
+        echo '    bats_libexec="${BATS_LIBEXEC:-}"'
+        # shellcheck disable=SC2016
+        echo '    eval "$(cd "$REPO_DIR" && mise env)"'
+        # shellcheck disable=SC2016
+        echo '    if [ -n "$bats_libexec" ]; then'
+        # shellcheck disable=SC2016
+        echo '      export PATH="$bats_libexec:$PATH"'
+        echo '    fi'
+        echo "  see: https://github.com/bats-core/bats-core/pull/1209"
+        failures=$((failures + 1))
+        found_offense=true
+        break
+      fi
+      # Reset for potential subsequent mise env calls (defensive)
+      bats_preserved=false
+    fi
+  done < "$suite"
+
+  if [[ "$found_offense" == false ]]; then
+    echo "OK    $name ($SETUP_SUITE preserves BATS_LIBEXEC correctly)"
+  fi
+done
+
+exit "$failures"
