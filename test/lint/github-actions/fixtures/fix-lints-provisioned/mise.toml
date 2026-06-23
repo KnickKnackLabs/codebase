@@ -1,3 +1,4 @@
+# codebase:ignore mise-shiv-plugin — fixture for github-actions rule, not a mise-shiv-plugin test case
 [plugins]
 shiv = "https://github.com/KnickKnackLabs/vfox-shiv"
 

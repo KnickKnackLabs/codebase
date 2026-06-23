@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+#MISE description="Check that mise.toml has shiv plugin setup when declaring shiv-managed tools"
+#USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/shell-files.sh
+source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
+
+# Required shiv plugin setup
+REQUIRED_PLUGIN_LINE='shiv = "https://github.com/KnickKnackLabs/vfox-shiv"'
+REQUIRED_SETTING='experimental = true'
+
+IFS=' ' read -ra TARGETS <<< "${usage_targets}"
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+  echo "ERROR: at least one target is required" >&2
+  exit 1
+fi
+
+# Resolve relative paths against CALLER_PWD (see lib/shell-files.sh).
+for i in "${!TARGETS[@]}"; do
+  TARGETS[i]=$(resolve_target "${TARGETS[i]}")
+done
+
+failures=0
+
+for target in "${TARGETS[@]}"; do
+  if [[ ! -e "$target" ]]; then
+    echo "ERROR: target does not exist: $target" >&2
+    exit 1
+  fi
+
+  toml="$target/mise.toml"
+  name=$(basename "$target")
+
+  if [[ ! -f "$toml" ]]; then
+    echo "INFO  $name: no mise.toml found"
+    continue
+  fi
+
+  # Check for file-level ignore
+  if head -20 "$toml" | grep -q 'codebase:ignore mise-shiv-plugin'; then
+    echo "SKIP  $name (codebase:ignore)"
+    continue
+  fi
+
+  # Check if any [tools] key starts with shiv:
+  if ! grep -q '^\s*"shiv:' "$toml" && ! grep -q "^shiv:" "$toml"; then
+    echo "OK    $name (no shiv tools declared)"
+    continue
+  fi
+
+  missing=()
+
+  # Check [plugins] for shiv entry
+  if ! grep -Eq '^\s*shiv\s*=' "$toml"; then
+    missing+=("$REQUIRED_PLUGIN_LINE")
+  fi
+
+  # Check [settings] for experimental = true
+  if ! grep -q "^experimental = true" "$toml"; then
+    missing+=("$REQUIRED_SETTING")
+  fi
+
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    echo "OK    $name"
+    continue
+  fi
+
+  echo "FAIL  $name: missing ${missing[*]}"
+  failures=$((failures + 1))
+done
+
+exit "$failures"

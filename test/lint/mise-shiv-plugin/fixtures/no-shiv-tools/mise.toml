@@ -1,0 +1,7 @@
+[settings]
+experimental = true
+quiet = true
+task_output = "interleave"
+
+[tools]
+bats = "1.13.0"

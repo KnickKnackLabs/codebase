@@ -1,0 +1,8 @@
+[settings]
+quiet = true
+
+[plugins]
+shiv = "https://github.com/KnickKnackLabs/vfox-shiv"
+
+[tools]
+"shiv:codebase" = "latest"
