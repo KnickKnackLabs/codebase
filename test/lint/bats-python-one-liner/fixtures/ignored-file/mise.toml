@@ -1,0 +1,3 @@
+[_.codebase]
+lint = ["bats-python-one-liner"]
+codebase:ignore bats-python-one-liner
