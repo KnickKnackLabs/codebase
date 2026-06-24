@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Pipeline — header goes into the pipe
+mise run check | grep error
+
+# Also with multiple pipes
+mise run list | sort | uniq

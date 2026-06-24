@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# This file has repo-level ignore, so violations are skipped
+result=$(mise run build)
+eval "$(mise run env)"
+mise run check | grep error

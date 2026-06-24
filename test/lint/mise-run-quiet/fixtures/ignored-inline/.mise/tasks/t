@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Inline ignore with reason — accepted
+result=$(mise run build)  # codebase:ignore mise-run-quiet — intentional, header is part of UX
+
+# No ignore — should be flagged
+eval "$(mise run env)"

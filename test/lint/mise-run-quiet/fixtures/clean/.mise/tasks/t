@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# No mise run calls here — just regular shell commands
+echo "hello world"
+ls -la
+git status

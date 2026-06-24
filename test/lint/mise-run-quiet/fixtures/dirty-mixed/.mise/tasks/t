@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Command substitution
+result=$(mise run build)
+
+# eval
+eval "$(mise run env)"
+
+# Pipeline
+mise run check | grep error
+
+# Bare invocation (interactive) — should be fine
+mise run status
+
+# Already quiet — should be fine
+mise run -q deploy
+
+# Stderr redirect — should be fine
+mise run lint 2>/dev/null
