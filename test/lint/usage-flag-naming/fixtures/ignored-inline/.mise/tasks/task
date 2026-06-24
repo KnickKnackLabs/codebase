@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#USAGE flag "-e --exclude <excludes>" help="Patterns to exclude"  # codebase:ignore=usage-flag-naming -- legacy name mismatch
+usage_excludes="*.tmp"
+echo "inline ignore"

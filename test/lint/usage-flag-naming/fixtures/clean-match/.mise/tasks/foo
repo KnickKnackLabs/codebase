@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#USAGE flag "--exclude <exclude>" help="Patterns to exclude"
+echo "clean task"

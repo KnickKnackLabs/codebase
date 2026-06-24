@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#USAGE flag "--model <model>" help="Model name"
+usage_model="gpt-4"
+echo "good task"

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#USAGE flag "-v" help="Verbose mode"
+echo "short only"

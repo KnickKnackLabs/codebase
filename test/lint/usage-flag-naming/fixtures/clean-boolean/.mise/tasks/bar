@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#USAGE flag "--verbose" help="Enable verbose output"
+echo "boolean only"
