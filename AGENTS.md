@@ -52,6 +52,24 @@ lint = [
 ]
 ```
 
+## Conventions
+
+### Commentary style
+
+Use single-line `# Section title` comments for test section headers. Do not use three-line `# ====== / # Title / # ======` dividers — they waste vertical space without adding information.
+
+```bash
+# Good — single line
+# Detection
+
+@test "..." {
+
+# Bad — three-line divider
+# ====================================================================
+# Detection
+# ====================================================================
+```
+
 ## Key patterns
 
 - Lint checks are per-repo opt-in via `[_.codebase]` in `mise.toml`

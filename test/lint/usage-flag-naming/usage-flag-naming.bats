@@ -7,9 +7,7 @@ setup() {
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
 }
 
-# ============================================================================
 # Clean cases — should pass
-# ============================================================================
 
 @test "usage-flag-naming: passes on clean task (flag/placeholder match)" {
   run codebase lint:usage-flag-naming "$FIXTURES/clean-match"
@@ -41,9 +39,7 @@ setup() {
   [[ "$output" == *"OK"* ]]
 }
 
-# ============================================================================
 # Dirty cases — should fail
-# ============================================================================
 
 @test "usage-flag-naming: flags mismatched flag/placeholder" {
   run codebase lint:usage-flag-naming "$FIXTURES/dirty-mismatch"
@@ -67,9 +63,7 @@ setup() {
   [[ "$output" == *"usage_search_paths"* ]]
 }
 
-# ============================================================================
 # Mixed cases
-# ============================================================================
 
 @test "usage-flag-naming: flags only dirty tasks in mixed target" {
   run codebase lint:usage-flag-naming "$FIXTURES/mixed"
@@ -80,9 +74,7 @@ setup() {
   [[ "$output" != *".mise/tasks/good"* ]]
 }
 
-# ============================================================================
 # Ignore mechanisms
-# ============================================================================
 
 @test "usage-flag-naming: respects inline codebase:ignore" {
   run codebase lint:usage-flag-naming "$FIXTURES/ignored-inline"
@@ -96,9 +88,7 @@ setup() {
   [[ "$output" == *"SKIP"* ]]
 }
 
-# ============================================================================
 # Output format
-# ============================================================================
 
 @test "usage-flag-naming: output includes task file path and line number" {
   run codebase lint:usage-flag-naming "$FIXTURES/dirty-mismatch"
@@ -114,9 +104,7 @@ setup() {
   [[ "$output" == *"mise"* ]]
 }
 
-# ============================================================================
 # Edge cases
-# ============================================================================
 
 @test "usage-flag-naming: handles empty target directory" {
   run codebase lint:usage-flag-naming "$FIXTURES/no-tasks"

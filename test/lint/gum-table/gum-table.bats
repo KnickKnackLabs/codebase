@@ -7,9 +7,7 @@ setup() {
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
 }
 
-# ============================================================================
 # High confidence: column -t (always a true positive)
-# ============================================================================
 
 @test "column-t: detects piping to column -t" {
   run codebase lint:gum-table "$FIXTURES/manual-padding/task-c"
@@ -18,9 +16,7 @@ setup() {
   [[ "$output" == *"WARN"* ]]
 }
 
-# ============================================================================
 # High confidence: printf padding inside a loop
-# ============================================================================
 
 @test "loop-table: detects printf %-Ns inside while-read" {
   run codebase lint:gum-table "$FIXTURES/manual-padding/task-b"
@@ -45,9 +41,7 @@ setup() {
   echo "$output" | grep "padding" | grep -q "INFO"
 }
 
-# ============================================================================
 # Low confidence: printf padding outside loops (INFO only, not a failure)
-# ============================================================================
 
 @test "padding: printf %-Ns outside loop is INFO, not a failure" {
   run codebase lint:gum-table "$FIXTURES/manual-padding/task-a"
@@ -69,9 +63,7 @@ setup() {
   [[ "$output" == *"INFO"* ]]
 }
 
-# ============================================================================
 # True negatives — no output at all
-# ============================================================================
 
 @test "clean: already using gum table" {
   run codebase lint:gum-table "$FIXTURES/clean/task-gum"
@@ -103,9 +95,7 @@ setup() {
   [[ "$output" == *"OK"* ]]
 }
 
-# ============================================================================
 # Multi-file scanning
-# ============================================================================
 
 @test "directory scan finds high-confidence hits" {
   run codebase lint:gum-table "$FIXTURES/manual-padding"
@@ -121,9 +111,7 @@ setup() {
   [ "$status" -eq 0 ]
 }
 
-# ============================================================================
 # Output format
-# ============================================================================
 
 @test "WARN output includes file path, category, and line number" {
   run codebase lint:gum-table "$FIXTURES/manual-padding/task-b"
@@ -136,9 +124,7 @@ setup() {
   [[ "$output" =~ INFO.*task-a:\[padding\].*[0-9]+: ]]
 }
 
-# ============================================================================
 # Error handling
-# ============================================================================
 
 @test "fails when target does not exist" {
   run codebase lint:gum-table /nonexistent
@@ -146,9 +132,7 @@ setup() {
   [[ "$output" == *"ERROR"* ]]
 }
 
-# ============================================================================
 # Relative path resolution (regression: codebase#24)
-# ============================================================================
 
 @test "relative path resolves against CODEBASE_CALLER_PWD (dirty fixture)" {
   # Regression: relative targets resolved against codebase's install
