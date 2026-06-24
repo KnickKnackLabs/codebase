@@ -3,7 +3,7 @@
 #USAGE arg "<targets>…" help="Paths to codebases to scan (one or more)"
 #USAGE flag "-p --pattern <pattern>" required=#true help="ast-grep pattern to search for"
 #USAGE flag "-l --lang <lang>" help="Language (default: bash)"
-#USAGE flag "-e --exclude <excludes>" help="Glob patterns to exclude (space-separated)"
+#USAGE flag "-e --exclude <exclude>" help="Glob patterns to exclude (space-separated)"
 
 set -euo pipefail
 
