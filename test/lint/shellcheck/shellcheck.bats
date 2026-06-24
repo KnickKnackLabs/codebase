@@ -7,9 +7,7 @@ setup() {
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
 }
 
-# ============================================================================
 # Detection
-# ============================================================================
 
 @test "lint: passes on a clean codebase" {
   run codebase lint:shellcheck "$FIXTURES/clean"
@@ -37,9 +35,7 @@ setup() {
   [[ "$output" == *"SC"* ]]
 }
 
-# ============================================================================
 # Ignore directive
-# ============================================================================
 
 @test "lint: skips when codebase:ignore shellcheck is set in mise.toml" {
   run codebase lint:shellcheck "$FIXTURES/ignored"
@@ -76,9 +72,7 @@ setup() {
   [[ "$output" == *"SC2154"* ]]
 }
 
-# ============================================================================
 # Scope
-# ============================================================================
 
 @test "lint: works on a codebase with no mise.toml" {
   run codebase lint:shellcheck "$FIXTURES/no-toml"
@@ -100,9 +94,7 @@ setup() {
   [[ "$output" == *"bad.sh"* ]]
 }
 
-# ============================================================================
 # Multi-target
-# ============================================================================
 
 @test "lint: checks multiple targets and reports each" {
   run codebase lint:shellcheck "$FIXTURES/clean" "$FIXTURES/dirty"
@@ -116,9 +108,7 @@ setup() {
   [ "$status" -eq 2 ]
 }
 
-# ============================================================================
 # Error paths
-# ============================================================================
 
 @test "lint: fails when target does not exist" {
   run codebase lint:shellcheck "$FIXTURES/does-not-exist"
