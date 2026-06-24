@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Extensionless shebang file — broad walk must find it.
+echo "ok" || :
+exec 2>/dev/null

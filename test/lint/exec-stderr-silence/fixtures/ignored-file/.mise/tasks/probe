@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Whole file is intentionally ignored via mise.toml
+if ! exec 3<>"$tty_path" 2>/dev/null; then
+  echo "Error" >&2
+  return 2
+fi
+
+exec 2>/dev/null

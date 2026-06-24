@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+#MISE description="Flag 'exec' with stderr redirection — suppression persists in the current shell"
+#USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+#USAGE example "codebase lint:exec-stderr-silence ." header="Flag exec stderr suppression"
+#USAGE example "exec 3<>\"$path\" 2>/dev/null  # codebase:ignore exec-stderr-silence — intentional fd setup" header="Intentional exec-replacements need a rule-specific reason"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/shell-files.sh
+source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
+
+# Rationale: 'exec' with stderr redirection (2>/dev/null, 2>&-, 2>!)
+# applies the redirect to the current shell, not just the exec'd command.
+# Inside an 'if' condition, '||', or function body, this suppresses all
+# subsequent stderr output — including BATS diagnostic output, error
+# messages from the containing function, etc.
+#
+# Safe alternative: group the exec probe so the redirection is scoped:
+#
+#   if ! { exec 3<>"$tty_path"; } 2>/dev/null; then
+#     echo "Error: confirmation required" >&2
+#     return 2
+#   fi
+#
+# For intentional process replacement / fd setup, add a rule-specific
+# inline ignore with a reason.
+
+IFS=' ' read -ra TARGETS <<< "${usage_targets}"
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+  echo "ERROR: at least one target is required" >&2
+  exit 1
+fi
+
+# Resolve relative paths against CALLER_PWD (see lib/shell-files.sh).
+for i in "${!TARGETS[@]}"; do
+  TARGETS[$i]=$(resolve_target "${TARGETS[$i]}")
+done
+
+# Pattern: line contains 'exec' followed (after skipping comments) by '2>'
+# with a stderr suppression/discard target.
+# We test for dangerous stderr targets directly:
+#   /dev/null  — discard
+#   &-         — close
+#   &1         — merge to stdout (also suppresses if stdout is null)
+#   !          — noclobber override (when used with /dev/null or null target)
+EXEC_STDERR_PATTERN='\bexec\b[^#]*2>([[:space:]]*/dev/(null|zero)|[[:space:]]*&[-1!?]|[[:space:]]*!)'
+
+has_rule_specific_ignore() {
+  local line="$1"
+  [[ "$line" =~ codebase:ignore[[:space:]]+exec-stderr-silence[[:space:]]+ ]]
+}
+
+scan_file() {
+  local file="$1"
+  local lineno=0
+  local line
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    lineno=$((lineno + 1))
+
+    # Skip full-line comments.
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+
+    # Check for exec with stderr suppression pattern.
+    if [[ "$line" =~ $EXEC_STDERR_PATTERN ]]; then
+      # Rule-specific inline ignore with a reason is accepted.
+      if has_rule_specific_ignore "$line"; then
+        continue
+      fi
+
+      local trimmed="${line#"${line%%[![:space:]]*}"}"
+      echo "$lineno:$trimmed"
+    fi
+  done < "$file"
+}
+
+failures=0
+
+for target in "${TARGETS[@]}"; do
+  if [[ ! -e "$target" ]]; then
+    echo "ERROR: target does not exist: $target" >&2
+    exit 1
+  fi
+
+  name=$(basename "$target")
+
+  # File-level ignore via mise.toml
+  toml="$target/mise.toml"
+  if [[ -f "$toml" ]] && grep -m1 -q 'codebase:ignore exec-stderr-silence' "$toml"; then
+    echo "SKIP  $name (codebase:ignore)"
+    continue
+  fi
+
+  # Collect shell files
+  files=()
+  while IFS= read -r f; do
+    [[ -n "$f" ]] && files+=("$f")
+  done < <(discover_shell_files "$target")
+
+  if [[ ${#files[@]} -eq 0 ]]; then
+    echo "OK    $name (no shell files found)"
+    continue
+  fi
+
+  # Scan each file — collect hits
+  hit_count=0
+  target_output=""
+  for file in "${files[@]}"; do
+    rel="${file#"$target"/}"
+    while IFS= read -r hit; do
+      [[ -z "$hit" ]] && continue
+      target_output+="  $rel:$hit"$'\n'
+      hit_count=$((hit_count + 1))
+    done < <(scan_file "$file")
+  done
+
+  if [[ "$hit_count" -gt 0 ]]; then
+    echo "FAIL  $name: $hit_count exec stderr suppression(s)"
+    printf '%s' "$target_output"
+    echo "  hint: exec with stderr redirection affects the current shell. Use a grouping construct ({ exec ...; } redirect stderr) or save/restore stderr explicitly."
+    failures=$((failures + 1))
+  else
+    echo "OK    $name (${#files[@]} file(s) clean)"
+  fi
+done
+
+exit "$failures"

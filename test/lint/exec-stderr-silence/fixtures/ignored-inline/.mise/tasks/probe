@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# This usage is legitimate (intentional fd setup) and annotated.
+exec 3<>"$path" 2>/dev/null  # codebase:ignore exec-stderr-silence — intentional exec fd setup for subprocess
+
+# Also annotated
+exec 2>/dev/null  # codebase:ignore exec-stderr-silence — intentional: discarding stderr for a specific probe
+
+# But this one is NOT annotated — should still be flagged
+exec 3<>"$tty" 2>/dev/null
