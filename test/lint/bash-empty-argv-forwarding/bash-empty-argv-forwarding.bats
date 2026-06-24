@@ -7,9 +7,7 @@ setup() {
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
 }
 
-# ============================================================================
 # Detection
-# ============================================================================
 
 @test "bash-empty-argv-forwarding: passes on a clean codebase" {
   run codebase lint:bash-empty-argv-forwarding "$FIXTURES/clean"
@@ -73,9 +71,7 @@ EOF
   [[ "$output" == *"delegate"* ]]
 }
 
-# ============================================================================
 # Ignore directives
-# ============================================================================
 
 @test "bash-empty-argv-forwarding: inline '# codebase:ignore — reason' skips the line" {
   run codebase lint:bash-empty-argv-forwarding "$FIXTURES/ignored-inline"
@@ -89,9 +85,7 @@ EOF
   [[ "$output" == *"SKIP"*"ignored-file"* ]]
 }
 
-# ============================================================================
 # Scope / discovery
-# ============================================================================
 
 @test "bash-empty-argv-forwarding: walks the whole target — finds hits outside .mise/tasks" {
   run codebase lint:bash-empty-argv-forwarding "$FIXTURES/broad-walk"
@@ -151,9 +145,7 @@ EOF
   rm -rf "$tmp"
 }
 
-# ============================================================================
 # Comment handling
-# ============================================================================
 
 @test "bash-empty-argv-forwarding: does not flag '\"$@\"' inside a full-line comment" {
   local tmp
@@ -171,9 +163,7 @@ EOF
   rm -rf "$tmp"
 }
 
-# ============================================================================
 # Multi-target
-# ============================================================================
 
 @test "bash-empty-argv-forwarding: checks multiple targets and reports each" {
   run codebase lint:bash-empty-argv-forwarding "$FIXTURES/clean" "$FIXTURES/dirty"
@@ -187,9 +177,7 @@ EOF
   [ "$status" -eq 2 ]
 }
 
-# ============================================================================
 # Error paths
-# ============================================================================
 
 @test "bash-empty-argv-forwarding: fails when target does not exist" {
   run codebase lint:bash-empty-argv-forwarding "$FIXTURES/does-not-exist"
@@ -204,9 +192,7 @@ EOF
   [[ "$output" == *"<targets>"* ]]
 }
 
-# ============================================================================
 # Relative path resolution
-# ============================================================================
 
 @test "bash-empty-argv-forwarding: relative path resolves against CODEBASE_CALLER_PWD" {
   local tmp
@@ -225,9 +211,7 @@ EOF
   rm -rf "$tmp"
 }
 
-# ============================================================================
 # Explicit braces detection
-# ============================================================================
 
 @test "bash-empty-argv-forwarding: flags '\"\${@}\"' (explicit braces) under nounset" {
   local tmp

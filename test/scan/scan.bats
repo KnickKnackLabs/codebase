@@ -8,9 +8,7 @@ setup() {
   FIXTURES_B="$BATS_TEST_DIRNAME/fixtures-b"
 }
 
-# ============================================================================
 # Single target (basic matching)
-# ============================================================================
 
 @test "scan: finds mise run calls in extension-less task files" {
   run codebase scan -p 'mise run $$$ARGS' "$FIXTURES_A"
@@ -39,9 +37,7 @@ setup() {
   [[ -z "$output" ]]
 }
 
-# ============================================================================
 # Different patterns
-# ============================================================================
 
 @test "scan: finds _task calls with custom pattern" {
   run codebase scan -p '_task $$$ARGS' "$FIXTURES_A"
@@ -56,9 +52,7 @@ setup() {
   [ "$count" -eq 4 ]
 }
 
-# ============================================================================
 # Multiple targets
-# ============================================================================
 
 @test "multi: finds matches across multiple codebases" {
   run codebase scan -p 'mise run $$$ARGS' "$FIXTURES_A" "$FIXTURES_B"
@@ -84,9 +78,7 @@ setup() {
   [[ "$output" != *"fixtures-b:"* ]]
 }
 
-# ============================================================================
 # Exclude filter
-# ============================================================================
 
 @test "exclude: filters out files matching glob" {
   run codebase scan -p 'mise run $$$ARGS' -e '.mise/tasks/ci/*' "$FIXTURES_A"
@@ -110,9 +102,7 @@ setup() {
   [[ "$output" != *"ci/deploy"* ]]
 }
 
-# ============================================================================
 # Error handling
-# ============================================================================
 
 @test "error: fails when no pattern provided" {
   run codebase scan "$FIXTURES_A"

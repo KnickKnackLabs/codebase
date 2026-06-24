@@ -23,9 +23,7 @@ assert_matches_before() {
   diff -u "$FIXTURES/before/$file" "$WORK_DIR/$file"
 }
 
-# ============================================================================
 # Individual variant tests
-# ============================================================================
 
 @test "migrate: simple mise run → _task" {
   codebase migrate:task-pattern "$WORK_DIR"
@@ -57,9 +55,7 @@ assert_matches_before() {
   assert_matches_after ".mise/tasks/error-strings"
 }
 
-# ============================================================================
 # Full migration test
-# ============================================================================
 
 @test "migrate: all files match expected after state" {
   codebase migrate:task-pattern "$WORK_DIR"
@@ -68,9 +64,7 @@ assert_matches_before() {
   [ "$status" -eq 0 ]
 }
 
-# ============================================================================
 # Reverse migration tests
-# ============================================================================
 
 @test "reverse: _task → mise run" {
   # Start from the after state
@@ -101,9 +95,7 @@ assert_matches_before() {
   ! grep -q '_task' "$WORK_DIR/.mise/tasks/in-subshell"
 }
 
-# ============================================================================
 # Round-trip tests
-# ============================================================================
 
 @test "round-trip: forward then reverse restores lossless fixtures" {
   # Only test fixtures where forward is lossless (no -q flag)
@@ -114,9 +106,7 @@ assert_matches_before() {
   assert_matches_before ".mise/tasks/error-strings"
 }
 
-# ============================================================================
 # Error handling
-# ============================================================================
 
 @test "migrate: fails when target does not exist" {
   run codebase migrate:task-pattern /nonexistent
