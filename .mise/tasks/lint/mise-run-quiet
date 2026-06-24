@@ -1,0 +1,227 @@
+#!/usr/bin/env bash
+#MISE description="Flag mise run without -q in clean-output contexts"
+#USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+#USAGE example "codebase lint:mise-run-quiet ." header="Flag mise run calls missing -q"
+#USAGE example "codebase lint:mise-run-quiet /path/to/repo"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/shell-files.sh
+source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
+
+# Rationale: 'mise run' without -q prints task runner headers such as
+# '[shell] $ ...' to stderr. That is useful for debugging, but harmful
+# when the command output is being eval'd, piped, embedded in generated
+# output, or used in shell startup.
+#
+# Example failure mode: eval "$(shiv shell)" visibly printed the task
+# header in the terminal on every shell startup.
+#
+# Contexts flagged:
+#   - command substitution: $(mise run ...) — header goes into captured output
+#   - eval: eval "$(mise run ...)" — header pollutes the eval'd string
+#   - pipeline: mise run ... | consumer — header goes into the pipe
+#
+# Safe contexts (not flagged):
+#   - mise run -q ... — already quiet
+#   - mise run ... 2>/dev/null — stderr explicitly discarded
+#   - bare mise run at line start (interactive/debug) — no capture
+#   - mise run in comments or string literals
+
+IFS=' ' read -ra TARGETS <<< "${usage_targets}"
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+  echo "ERROR: at least one target is required" >&2
+  exit 1
+fi
+
+# Resolve relative paths against CALLER_PWD (see lib/shell-files.sh).
+for i in "${!TARGETS[@]}"; do
+  TARGETS[i]=$(resolve_target "${TARGETS[i]}")
+done
+
+# ── Helpers ──────────────────────────────────────────────────────────────
+
+# has_stderr_redirect <line>
+# Returns 0 if the line redirects stderr (2>...).
+has_stderr_redirect() {
+  local line="$1"
+  echo "$line" | grep -qE '2>[>&]?[^&[:space:]]' 2>/dev/null
+}
+
+# is_pattern_match <line>
+# Returns 0 if 'mise run' appears inside a grep/sed/awk pattern or string
+# literal rather than as an actual command invocation.
+is_pattern_match() {
+  local line="$1"
+  # grep/sed/awk with 'mise run' in the pattern (single or double quoted)
+  echo "$line" | grep -qE "(grep|sed|awk)[[:space:]].*['\"].*mise run" 2>/dev/null && return 0
+  # echo with 'mise run' in a string
+  echo "$line" | grep -qE "echo[[:space:]].*['\"].*mise run" 2>/dev/null && return 0
+  # printf with 'mise run' in a format string
+  echo "$line" | grep -qE "printf[[:space:]].*['\"].*mise run" 2>/dev/null && return 0
+  return 1
+}
+
+# classify_context <line>
+# Emit the context classification for a mise run invocation.
+classify_context() {
+  local line="$1"
+
+  # Skip if mise run is inside a grep/sed pattern or string literal
+  is_pattern_match "$line" && echo "pattern" && return
+
+  # Already quiet — skip
+  if echo "$line" | grep -qE 'mise run\s+-q'; then
+    echo "quiet"
+    return
+  fi
+
+  # eval context: eval "$(mise run ...)"
+  if echo "$line" | grep -qE 'eval\s+"\$\([^)]*mise run'; then
+    echo "eval"
+    return
+  fi
+
+  # Command substitution context: $(mise run ...)
+  if echo "$line" | grep -qE '\$\([^)]*mise run'; then
+    echo "command-sub"
+    return
+  fi
+
+  # Pipeline context: mise run ... | consumer
+  if echo "$line" | grep -qE 'mise run[^|]*\|'; then
+    echo "pipeline"
+    return
+  fi
+
+  # Has stderr redirect — safe
+  if has_stderr_redirect "$line"; then
+    echo "stderr-redirect"
+    return
+  fi
+
+  # Bare mise run (interactive/debug) — safe
+  echo "bare"
+}
+
+# has_line_ignore <line>
+# Returns 0 if the line has a rule-specific inline ignore.
+has_line_ignore() {
+  local line="$1"
+  echo "$line" | grep -qE 'codebase:ignore[[:space:]]+mise-run-quiet' 2>/dev/null
+}
+
+# scan_file <file>
+# Emit flagged line numbers and context for mise run calls without -q.
+scan_file() {
+  local file="$1"
+  local lineno=0
+  local line
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    lineno=$((lineno + 1))
+
+    # Skip full-line comments.
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+
+    # Skip lines without mise run.
+    [[ "$line" != *"mise run"* ]] && continue
+
+    # Rule-specific inline ignore with reason is accepted.
+    has_line_ignore "$line" && continue
+
+    # Classify the context.
+    local context
+    context=$(classify_context "$line")
+
+    case "$context" in
+      quiet|stderr-redirect|bare|pattern)
+        # Safe contexts — skip
+        ;;
+      command-sub)
+        local trimmed
+        trimmed="${line#"${line%%[![:space:]]*}"}"
+        echo "[command-sub] $lineno: $trimmed"
+        ;;
+      eval)
+        local trimmed
+        trimmed="${line#"${line%%[![:space:]]*}"}"
+        echo "[eval] $lineno: $trimmed"
+        ;;
+      pipeline)
+        local trimmed
+        trimmed="${line#"${line%%[![:space:]]*}"}"
+        echo "[pipeline] $lineno: $trimmed"
+        ;;
+    esac
+  done < "$file"
+}
+
+# ── Main ──────────────────────────────────────────────────────────────────
+
+failures=0
+
+for target in "${TARGETS[@]}"; do
+  if [[ ! -e "$target" ]]; then
+    echo "ERROR: target does not exist: $target" >&2
+    exit 1
+  fi
+
+  name=$(basename "$target")
+
+  # File-level ignore via mise.toml
+  toml="$target/mise.toml"
+  if [[ -f "$toml" ]] && grep -m1 -q 'codebase:ignore mise-run-quiet' "$toml"; then
+    echo "SKIP  $name (codebase:ignore)"
+    continue
+  fi
+
+  # Collect shell files
+  files=()
+  while IFS= read -r f; do
+    [[ -n "$f" ]] && files+=("$f")
+  done < <(discover_shell_files "$target")
+
+  if [[ ${#files[@]} -eq 0 ]]; then
+    echo "OK    $name (no shell files found)"
+    continue
+  fi
+
+  # Scan each file; collect hits
+  hit_count=0
+  warn_count=0
+  target_output=""
+  for file in "${files[@]}"; do
+    rel="${file#"$target"/}"
+    while IFS= read -r hit; do
+      [[ -z "$hit" ]] && continue
+      target_output+="  $rel:$hit"$'\n'
+      if [[ "$hit" == \[command-sub\]* ]] || [[ "$hit" == \[eval\]* ]]; then
+        hit_count=$((hit_count + 1))
+      elif [[ "$hit" == \[pipeline\]* ]]; then
+        warn_count=$((warn_count + 1))
+      fi
+    done < <(scan_file "$file")
+  done
+
+  if [[ "$hit_count" -gt 0 ]] || [[ "$warn_count" -gt 0 ]]; then
+    detail=""
+    [[ "$hit_count" -gt 0 ]] && detail+="$hit_count mise run call(s) without -q in capture context(s)"
+    [[ "$hit_count" -gt 0 && "$warn_count" -gt 0 ]] && detail+=", "
+    [[ "$warn_count" -gt 0 ]] && detail+="$warn_count pipeline(s) without -q"
+    echo "FAIL  $name: $detail"
+    printf '%s' "$target_output"
+    cat <<'HINT'
+  hint: Add -q to mise run calls in capture contexts: mise run -q <task>
+        For pipelines: mise run -q <task> | consumer
+        For eval: eval "$(mise run -q <task>)"
+        For command substitution: $(mise run -q <task>)
+HINT
+    failures=$((failures + 1))
+  else
+    echo "OK    $name (${#files[@]} file(s) clean)"
+  fi
+done
+
+exit "$failures"

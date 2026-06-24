@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Command substitution — header goes into captured output
+result=$(mise run build)
+echo "$result"
+
+# Also in a more complex expression
+count=$(mise run count --all)

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# eval — header pollutes the eval'd string
+eval "$(mise run env)"
+
+# Also with additional flags
+eval "$(mise run shell --init)"

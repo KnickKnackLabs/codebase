@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Already using -q — should be fine
+mise run -q build
+mise run -q test -- --filter unit
+result=$(mise run -q status)
