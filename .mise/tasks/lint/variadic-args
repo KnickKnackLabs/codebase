@@ -1,0 +1,300 @@
+#!/usr/bin/env bash
+#MISE description="Flag dangerous variadic usage_* consumption (eval or read -ra on var=#true values)"
+#USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/shell-files.sh
+source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
+
+# Rationale: mise's `#USAGE arg "..." var=#true` and `#USAGE flag "--x <x>" var=#true`
+# deliver variadic values as a single shell-escaped string in $usage_*. Two common
+# consumption patterns are dangerous:
+#
+#   1. eval "ARRAY=(${usage_X:-})"  — SHELL INJECTION VECTOR.
+#      Any value containing backticks, $(), or shell metacharacters executes.
+#
+#   2. read -ra ARRAY <<< "$usage_X" — LOSES QUOTING on multi-word values.
+#      mise wraps multi-word values in single quotes; read -ra splits on
+#      whitespace and ignores the quoting, producing broken argument lists.
+#
+# The correct pattern for bash (per mise-conventions.md):
+#
+#     ARGS=()
+#     if [ -n "${usage_args:-}" ]; then
+#       while IFS= read -r arg; do
+#         ARGS+=("$arg")
+#       done < <(printf '%s' "$usage_args" | xargs printf '%s\n')
+#     fi
+#
+# For Python tasks, use shlex.split() instead.
+#
+# See: or#146, mise-conventions.md ("variadic args" section)
+
+IFS=' ' read -ra TARGETS <<< "${usage_targets}"
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+  echo "ERROR: at least one target is required" >&2
+  exit 1
+fi
+
+# Resolve relative paths against CALLER_PWD (see lib/shell-files.sh).
+for i in "${!TARGETS[@]}"; do
+  TARGETS[$i]=$(resolve_target "${TARGETS[$i]}")
+done
+
+# ---------------------------------------------------------------------------
+# Phase 1 helpers: parse #USAGE directives to extract variadic env var names
+# ---------------------------------------------------------------------------
+
+# collect_variadic_vars <task_file>
+#
+# Emit one usage_<name> per line for every #USAGE arg or flag with var=#true.
+#
+#   #USAGE arg "[args]..." var=#true          → usage_args
+#   #USAGE flag "--exclude <excludes>" var=#true  → usage_exclude
+#   #USAGE flag "-e --exclude <excludes>" var=#true → usage_exclude
+#
+# Non-variadic directives (no var=#true), boolean flags, and short-only
+# flags are skipped.
+collect_variadic_vars() {
+  local file="$1"
+  local line
+
+  while IFS= read -r line; do
+    # Match #USAGE arg with var=#true → usage_args
+    if [[ "$line" =~ ^[[:space:]]*#USAGE[[:space:]]+arg[[:space:]] ]]; then
+      if [[ "$line" =~ var=#?true ]]; then
+        echo "usage_args"
+      fi
+      continue
+    fi
+
+    # Match #USAGE flag with var=#true → extract long flag name
+    if [[ "$line" =~ ^[[:space:]]*#USAGE[[:space:]]+flag[[:space:]] ]]; then
+      if [[ "$line" =~ var=#?true ]]; then
+        # Extract the last long flag (--foo-bar or --foo)
+        if [[ "$line" =~ --([a-zA-Z0-9_-]+) ]]; then
+          local flag_name="${BASH_REMATCH[1]}"
+          # Mise converts hyphens to underscores for the env var name
+          local var_name="usage_${flag_name//-/_}"
+          echo "$var_name"
+        fi
+      fi
+    fi
+  done < "$file"
+}
+
+# ---------------------------------------------------------------------------
+# Phase 2 helpers: scan file for dangerous consumption patterns
+# ---------------------------------------------------------------------------
+
+# Patterns for dangerous variadic consumption.
+# These match the *variable reference* side — we cross-reference against
+# known variadic vars after detection.
+
+# eval "ARRAY=(${usage_X...})" or eval "ARRAY=($usage_X...)"
+EVAL_RE='eval\s+"?\w+=\((\$\{?usage_[A-Za-z_][A-Za-z0-9_]*)'
+
+# eval ARRAY=(${usage_X...})  (bare — rarely used but still dangerous)
+EVAL_BARE_RE='eval\s+\w+=\((\$\{?usage_[A-Za-z_][A-Za-z0-9_]*)'
+
+# read -ra ARRAY <<< "$usage_X"  (quoted herestring)
+READRA_QUOTED_RE='read\s+-ra\s+\w+\s+<<<\s+"(\$usage_[A-Za-z_][A-Za-z0-9_]*)"'
+
+# read -ra ARRAY <<< $usage_X     (unquoted — even worse, word-splits before read)
+READRA_UNQUOTED_RE='read\s+-ra\s+\w+\s+<<<\s+(\$usage_[A-Za-z_][A-Za-z0-9_]*)([^"]|$)'
+
+# extract_usage_var <line>
+#
+# Emit the usage_<name> variable referenced in a dangerous consumption line.
+# Matches all four patterns above and deduplicates.
+extract_usage_var() {
+  local line="$1"
+
+  if [[ "$line" =~ $EVAL_RE ]]; then
+    echo "${BASH_REMATCH[1]}" | sed 's/[${}]//g'
+    return
+  fi
+
+  if [[ "$line" =~ $EVAL_BARE_RE ]]; then
+    echo "${BASH_REMATCH[1]}" | sed 's/[${}]//g'
+    return
+  fi
+
+  if [[ "$line" =~ $READRA_QUOTED_RE ]]; then
+    echo "${BASH_REMATCH[1]}" | sed 's/[$"]//g'
+    return
+  fi
+
+  if [[ "$line" =~ $READRA_UNQUOTED_RE ]]; then
+    echo "${BASH_REMATCH[1]}" | sed 's/[$"]//g'
+    return
+  fi
+}
+
+# classify_dangerous_pattern <line>
+#
+# Returns "eval" if the line uses eval-array, "read-ra" if read -ra.
+classify_dangerous_pattern() {
+  local line="$1"
+  if [[ "$line" =~ eval ]]; then
+    echo "eval"
+  elif [[ "$line" =~ read[[:space:]]+-ra ]]; then
+    echo "read-ra"
+  fi
+}
+
+# discover_task_files <target>
+#
+# Emit paths of task files under <target>/.mise/tasks/.
+# Excludes '*/fixtures/*' paths (lint-rule fixtures contain intentional
+# negatives — scanning them would produce self-flagging meta-recursion).
+discover_task_files() {
+  local target="$1"
+
+  if [[ ! -d "$target/.mise/tasks" ]]; then
+    return
+  fi
+
+  # Use fd with --exclude fixtures for component-aware exclusion.
+  # Tasks under .mise/tasks/ are extension-less executable files (no .sh).
+  fd -t f --exclude fixtures . "$target/.mise/tasks"
+}
+
+# scan_file <file> <variadic_vars_array_name>
+#
+# Scan a single task file for dangerous consumption of any var in the
+# variadic set. Emit "lineno:line" for each finding.
+scan_file() {
+  local file="$1"
+  local -n _vars="$2"
+  local lineno=0
+  local line
+  local findings=()
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    lineno=$((lineno + 1))
+
+    # Skip full-line comments.
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+
+    # Inline opt-out — respects structured and bare forms.
+    [[ "$line" == *"codebase:ignore"* ]] && continue
+
+    # Check if line contains any dangerous pattern
+    if [[ "$line" =~ $EVAL_RE ]] || [[ "$line" =~ $EVAL_BARE_RE ]] \
+        || [[ "$line" =~ $READRA_QUOTED_RE ]] || [[ "$line" =~ $READRA_UNQUOTED_RE ]]; then
+
+      local consumed_var
+      consumed_var=$(extract_usage_var "$line")
+
+      # Cross-reference: only flag if the consumed var is in the variadic set
+      local is_variadic=false
+      for v in "${_vars[@]}"; do
+        if [[ "$v" == "$consumed_var" ]]; then
+          is_variadic=true
+          break
+        fi
+      done
+
+      if $is_variadic; then
+        local pattern
+        pattern=$(classify_dangerous_pattern "$line")
+        local trimmed="${line#"${line%%[![:space:]]*}"}"
+        findings+=("$lineno|$trimmed|$pattern|$consumed_var")
+      fi
+    fi
+  done < "$file"
+
+  if [[ ${#findings[@]} -gt 0 ]]; then
+    for f in "${findings[@]}"; do
+      echo "$f"
+    done
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Main loop
+# ---------------------------------------------------------------------------
+
+failures=0
+
+for target in "${TARGETS[@]}"; do
+  if [[ ! -e "$target" ]]; then
+    echo "ERROR: target does not exist: $target" >&2
+    exit 1
+  fi
+
+  name=$(basename "$target")
+
+  # File-level ignore via mise.toml
+  toml="$target/mise.toml"
+  if [[ -f "$toml" ]] && rg -q 'codebase:ignore variadic-args' "$toml"; then
+    echo "SKIP  $name (codebase:ignore)"
+    continue
+  fi
+
+  # Discover task files
+  task_files=()
+  while IFS= read -r f; do
+    [[ -n "$f" ]] && task_files+=("$f")
+  done < <(discover_task_files "$target")
+
+  if [[ ${#task_files[@]} -eq 0 ]]; then
+    echo "OK    $name (no .mise/tasks/ files found)"
+    continue
+  fi
+
+  # Phase 1 for each task: collect variadic vars
+  hit_count=0
+  target_output=""
+
+  for task_file in "${task_files[@]}"; do
+    variadic_vars=()
+    while IFS= read -r v; do
+      [[ -n "$v" ]] && variadic_vars+=("$v")
+    done < <(collect_variadic_vars "$task_file")
+
+    # Skip if no variadic vars declared in this task
+    if [[ ${#variadic_vars[@]} -eq 0 ]]; then
+      continue
+    fi
+
+    # Phase 2: scan for dangerous consumption
+    rel="${task_file#"$target"/}"
+    while IFS= read -r finding; do
+      [[ -z "$finding" ]] && continue
+
+      lineno="${finding%%|*}"
+      rest="${finding#*|}"
+      line_text="${rest%%|*}"
+      rest="${rest#*|}"
+      pattern="${rest%%|*}"
+      var_name="${rest#*|}"
+
+      if [[ "$pattern" == "eval" ]]; then
+        target_output+="  $rel:$lineno:  $line_text"$'\n'
+        target_output+="    ERROR: eval is a shell injection vector — use xargs printf pattern instead"$'\n'
+      else
+        target_output+="  $rel:$lineno:  $line_text"$'\n'
+        target_output+="    WARN: read -ra loses quoting on multi-word values from mise — use xargs printf pattern instead"$'\n'
+      fi
+      hit_count=$((hit_count + 1))
+    done < <(scan_file "$task_file" variadic_vars)
+  done
+
+  if [[ "$hit_count" -gt 0 ]]; then
+    echo "FAIL  $name: $hit_count dangerous variadic-arg consumption(s)"
+    printf '%s' "$target_output"
+    echo "  hint: use 'xargs printf' pattern for bash:"
+    echo "        while IFS= read -r arg; do ARGS+=(\"\$arg\"); done < <(printf '%s' \"\$var\" | xargs printf '%s\\n')"
+    echo "        For Python tasks, use shlex.split(). See mise-conventions.md ('variadic args' section)."
+    echo "        Annotate false positives with '# codebase:ignore variadic-args — <reason>'"
+    failures=$((failures + 1))
+  else
+    echo "OK    $name (${#task_files[@]} task file(s) clean)"
+  fi
+done
+
+exit "$failures"

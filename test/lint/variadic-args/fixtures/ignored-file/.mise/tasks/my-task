@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="This task has violations but is file-ignored"
+#USAGE arg "[args]..." var=#true help="Arguments"
+set -euo pipefail
+
+eval "ARGS=(${usage_args:-})"

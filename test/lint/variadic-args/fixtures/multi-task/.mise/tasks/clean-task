@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#MISE description="Good task — uses xargs pattern"
+#USAGE arg "[args]..." var=#true help="Arguments"
+set -euo pipefail
+
+ARGS=()
+if [ -n "${usage_args:-}" ]; then
+  while IFS= read -r arg; do
+    ARGS+=("$arg")
+  done < <(printf '%s' "$usage_args" | xargs printf '%s\n')
+fi
+
+echo "${ARGS[@]}"

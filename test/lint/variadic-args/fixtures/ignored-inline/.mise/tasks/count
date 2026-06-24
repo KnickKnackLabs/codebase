@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Has inline ignore"
+#USAGE flag "--query <query>" var=#true help="Search queries"
+set -euo pipefail
+
+read -ra QUERIES <<< "$usage_query"  # codebase:ignore variadic-args — intentional, only single-word queries
