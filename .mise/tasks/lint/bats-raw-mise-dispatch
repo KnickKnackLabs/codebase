@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+#MISE description="Flag raw 'mise run' in BATS tests (call the tool, not the script)"
+#USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+#USAGE example "codebase lint:bats-raw-mise-dispatch ." header="Flag raw mise dispatch in BATS tests"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/shell-files.sh
+source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
+
+# Rationale: BATS tests should call the tool wrapper (e.g. `notes lock`),
+# not raw `mise run lock`. The wrapper is the same path a user/shiv shim
+# takes — it handles CALLER_PWD, stderr routing, and the caller-cwd
+# contract. Tests that bypass the wrapper can pass but exercise a
+# different code path than real usage. See fold/notes/bats-tool-testing.md
+# ("Call the Tool, Not the Script") for the full write-up.
+#
+# This rule is the inverse sibling of lint:bats-test-helper:
+#   - bats-test-helper: flags DIRECT script invocation (bash .mise/tasks/foo)
+#   - bats-raw-mise-dispatch: flags mise run IN test bodies
+# Both converge on the same desired pattern: wrapper function in helper.
+#
+# Legitimate exceptions:
+#   - Wrapper definition itself (test_helper.bash / helpers.bash) —
+#     that file IS the wrapper, so mise run there is correct.
+#   - Tests intentionally exercising mise dispatch — annotate with
+#     `# codebase:ignore bats-raw-mise-dispatch`.
+#   - Repo-wide opt-out via `codebase:ignore bats-raw-mise-dispatch`
+#     in mise.toml.
+
+IFS=' ' read -ra TARGETS <<< "${usage_targets}"
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+  echo "ERROR: at least one target is required" >&2
+  exit 1
+fi
+
+# Resolve relative paths against CALLER_PWD (see lib/shell-files.sh).
+for i in "${!TARGETS[@]}"; do
+  TARGETS[$i]=$(resolve_target "${TARGETS[$i]}")
+done
+
+# Allowlisted files: these define the tool wrapper, so `mise run` inside
+# them is the canonical pattern, not a violation.
+ALLOWLIST_FILES=(
+  "test/test_helper.bash"
+  "test/helpers.bash"
+  "test/test_helper.sh"
+  "test/helpers.sh"
+)
+
+is_allowlisted() {
+  local relpath="$1"
+  for allowed in "${ALLOWLIST_FILES[@]}"; do
+    [[ "$relpath" == "$allowed" ]] && return 0
+  done
+  return 1
+}
+
+# Patterns: `mise run <task>`, `mise -C <dir> run <task>`.
+# We only match at statement boundaries — start of line, after `|`,
+# `||`, `&&`, `;`, `(`, `{`, or after `run ` (bats run command) or
+# `exec `. This rules out test descriptions (`@test "... mise run ..."`)
+# and search patterns (`grep -q 'mise run'`, `-p 'mise run ...'`).
+#
+# Same approach as bats-test-helper's STMT_BOUNDARY.
+STMT_BOUNDARY='(^|[[:space:]]|[;&|({])'
+MISE_RUN_RE="${STMT_BOUNDARY}(exec[[:space:]]+)?(run[[:space:]]+)?mise[[:space:]]+(-C[[:space:]]+[^[:space:]]+[[:space:]]+)?run[[:space:]]"
+
+# is_in_quoted_string <before_match>
+#
+# Check if the given prefix (characters before a match on the same line)
+# indicates we are inside a quoted string. Returns 0 if inside a string.
+# Uses simple odd-count heuristic: if there's an odd number of single
+# quotes OR double quotes in the prefix, the match is inside a string.
+#
+# False positive: a string that ends before the match (e.g. 'foo' mise run).
+# But this is rare enough that the heuristic is worth it — the common case
+# is `grep -q 'mise run'` or `printf '... mise run ...'`.
+is_in_quoted_string() {
+  local prefix="$1"
+  local single_count=0
+  local double_count=0
+  local c
+
+  for (( i=0; i<${#prefix}; i++ )); do
+    c="${prefix:$i:1}"
+    [[ "$c" == "'" ]] && single_count=$((single_count + 1))
+    [[ "$c" == '"' ]] && double_count=$((double_count + 1))
+  done
+
+  # Odd count of either quote type = inside a string
+  [[ $((single_count % 2)) -eq 1 ]] && return 0
+  [[ $((double_count % 2)) -eq 1 ]] && return 0
+  return 1
+}
+
+scan_file() {
+  local file="$1"
+  local lineno=0
+  local line
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    lineno=$((lineno + 1))
+
+    # Skip full-line comments.
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+
+    # Inline opt-out.
+    [[ "$line" == *"codebase:ignore"* ]] && continue
+
+    # Skip test description lines (heuristic: @test followed by a string).
+    [[ "$line" =~ ^[[:space:]]*@test ]] && continue
+
+    if [[ "$line" =~ $MISE_RUN_RE ]]; then
+      # Get the text before the matched mise run
+      local prefix="${line%%mise*}"
+      if is_in_quoted_string "$prefix"; then
+        continue
+      fi
+      local trimmed="${line#"${line%%[![:space:]]*}"}"
+      echo "$lineno: $trimmed"
+    fi
+  done < "$file"
+}
+
+failures=0
+
+for target in "${TARGETS[@]}"; do
+  if [[ ! -e "$target" ]]; then
+    echo "ERROR: target does not exist: $target" >&2
+    exit 1
+  fi
+
+  name=$(basename "$target")
+
+  # File-level ignore via mise.toml
+  toml="$target/mise.toml"
+  if [[ -f "$toml" ]] && rg -q 'codebase:ignore bats-raw-mise-dispatch' "$toml"; then
+    echo "SKIP  $name (codebase:ignore)"
+    continue
+  fi
+
+  # Collect test files — same discovery as bats-test-helper:
+  # *.bats and *.bash under test/, excluding fixtures/.
+  files=()
+  if [[ -d "$target/test" ]]; then
+    while IFS= read -r f; do
+      [[ -n "$f" ]] && files+=("$f")
+    done < <(fd -t f -e bats -e bash --exclude fixtures . "$target/test" 2>/dev/null || true)
+  fi
+
+  if [[ ${#files[@]} -eq 0 ]]; then
+    echo "OK    $name (no test/ files found)"
+    continue
+  fi
+
+  hit_count=0
+  target_output=""
+
+  for file in "${files[@]}"; do
+    rel="${file#"$target"/}"
+
+    # Skip allowlisted wrapper definition files
+    is_allowlisted "$rel" && continue
+
+    while IFS= read -r hit; do
+      [[ -z "$hit" ]] && continue
+      target_output+="  $rel:$hit"$'\n'
+      hit_count=$((hit_count + 1))
+    done < <(scan_file "$file")
+  done
+
+  if [[ "$hit_count" -gt 0 ]]; then
+    echo "FAIL  $name: $hit_count raw mise dispatch(s) in test/"
+    printf '%s' "$target_output"
+    echo "  hint: define a wrapper (e.g. mytool() { cd \"\$REPO_DIR\" && mise run -q \"\$@\"; })"
+    echo "        in test_helper.bash and call \`run mytool <subcommand>\` instead."
+    echo "        See fold/notes/bats-tool-testing.md ('Call the Tool, Not the Script')"
+    failures=$((failures + 1))
+  else
+    echo "OK    $name (${#files[@]} file(s) clean)"
+  fi
+done
+
+exit "$failures"
