@@ -7,9 +7,7 @@ setup() {
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
 }
 
-# ============================================================================
 # Pass paths
-# ============================================================================
 
 @test "bats-test-helper: passes on clean wrapper-based tests" {
   run codebase lint:bats-test-helper "$FIXTURES/clean"
@@ -24,9 +22,7 @@ setup() {
   [[ "$output" == *"no test/ files found"* ]]
 }
 
-# ============================================================================
 # Invocation signatures — each form fails
-# ============================================================================
 
 @test "bats-test-helper: flags 'bash \$TASK' (var whose name contains TASK)" {
   run codebase lint:bats-test-helper "$FIXTURES/dirty-task-var"
@@ -84,9 +80,7 @@ setup() {
   [[ "$output" == *"bash \$REPO_DIR/.mise/tasks/lint/check"* ]]
 }
 
-# ============================================================================
 # False positives — none of these are actual invocations
-# ============================================================================
 
 @test "bats-test-helper: does NOT flag reading a task file as data (grep/cat)" {
   # Regression guard: 'grep "$MCR/.mise/tasks/foo"' reads the script, doesn't
@@ -97,9 +91,7 @@ setup() {
   [[ "$output" == *"OK"* ]]
 }
 
-# ============================================================================
 # Ignore directives
-# ============================================================================
 
 @test "bats-test-helper: inline '# codebase:ignore' suppresses a single line" {
   run codebase lint:bats-test-helper "$FIXTURES/ignored-inline"
@@ -113,9 +105,7 @@ setup() {
   [[ "$output" == *"SKIP"*"ignored-file"* ]]
 }
 
-# ============================================================================
 # Output details
-# ============================================================================
 
 @test "bats-test-helper: fail output includes file:line citations" {
   run codebase lint:bats-test-helper "$FIXTURES/dirty-task-var"
@@ -130,9 +120,7 @@ setup() {
   [[ "$output" == *"Call the Tool"* ]]
 }
 
-# ============================================================================
 # Error handling
-# ============================================================================
 
 @test "bats-test-helper: fails when no targets given" {
   run codebase lint:bats-test-helper
@@ -146,9 +134,7 @@ setup() {
   [[ "$output" == *"does not exist"* ]]
 }
 
-# ============================================================================
 # Multi-target
-# ============================================================================
 
 @test "bats-test-helper: accepts multiple targets and reports each" {
   run codebase lint:bats-test-helper "$FIXTURES/clean" "$FIXTURES/dirty-task-var"

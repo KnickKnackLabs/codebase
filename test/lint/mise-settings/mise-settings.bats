@@ -7,9 +7,7 @@ setup() {
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
 }
 
-# ============================================================================
 # Detection
-# ============================================================================
 
 @test "lint: passes when all settings present" {
   run codebase lint:mise-settings "$FIXTURES/complete"
@@ -54,9 +52,7 @@ setup() {
   [[ "$output" == *"FAIL"*"missing-both"* ]]
 }
 
-# ============================================================================
 # Fix mode
-# ============================================================================
 
 @test "fix: adds missing settings" {
   WORK_DIR="$BATS_TEST_TMPDIR/fix-test"
@@ -96,9 +92,7 @@ setup() {
   [[ "$output" == *"OK"* ]]
 }
 
-# ============================================================================
 # Error handling
-# ============================================================================
 
 @test "lint: fails when target does not exist" {
   run codebase lint:mise-settings /nonexistent

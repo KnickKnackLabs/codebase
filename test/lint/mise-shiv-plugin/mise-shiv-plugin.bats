@@ -7,9 +7,7 @@ setup() {
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
 }
 
-# ============================================================================
 # Detection
-# ============================================================================
 
 @test "lint: passes when shiv plugin and experimental are present" {
   run codebase lint:mise-shiv-plugin "$FIXTURES/complete"
@@ -68,9 +66,7 @@ setup() {
   [[ "$output" == *"FAIL"*"missing-both"* ]]
 }
 
-# ============================================================================
 # Error handling
-# ============================================================================
 
 @test "lint: fails when target does not exist" {
   run codebase lint:mise-shiv-plugin /nonexistent
