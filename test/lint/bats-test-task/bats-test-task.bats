@@ -7,9 +7,7 @@ setup() {
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
 }
 
-# ============================================================================
 # Pass paths
-# ============================================================================
 
 @test "bats-test-task: passes on the canonical pattern" {
   run codebase lint:bats-test-task "$FIXTURES/clean"
@@ -33,9 +31,7 @@ setup() {
   [[ "$output" == *"OK"*"shimmer-variant"* ]]
 }
 
-# ============================================================================
 # Failure modes
-# ============================================================================
 
 @test "bats-test-task: flags missing USAGE arg spec" {
   run codebase lint:bats-test-task "$FIXTURES/missing-usage-arg"
@@ -80,9 +76,7 @@ setup() {
   [[ "$output" != *"invocations found"* ]]
 }
 
-# ============================================================================
 # Ignore directive
-# ============================================================================
 
 @test "bats-test-task: 'codebase:ignore bats-test-task' in mise.toml skips the target" {
   run codebase lint:bats-test-task "$FIXTURES/ignored-file"
@@ -90,9 +84,7 @@ setup() {
   [[ "$output" == *"SKIP"*"ignored-file"* ]]
 }
 
-# ============================================================================
 # Output details
-# ============================================================================
 
 @test "bats-test-task: fail output includes the remediation hint" {
   run codebase lint:bats-test-task "$FIXTURES/missing-usage-arg"
@@ -109,9 +101,7 @@ setup() {
   [[ "$output" == *"invocations"* ]]
 }
 
-# ============================================================================
 # Error handling
-# ============================================================================
 
 @test "bats-test-task: fails when no targets given" {
   run codebase lint:bats-test-task
@@ -125,9 +115,7 @@ setup() {
   [[ "$output" == *"does not exist"* ]]
 }
 
-# ============================================================================
 # Multi-target
-# ============================================================================
 
 @test "bats-test-task: accepts multiple targets and reports each" {
   run codebase lint:bats-test-task "$FIXTURES/clean" "$FIXTURES/missing-examples"
