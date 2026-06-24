@@ -7,9 +7,7 @@ setup() {
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
 }
 
-# ============================================================================
-# Pass paths
-# ============================================================================
+# === Pass paths ===
 
 @test "bats-raw-mise-dispatch: passes on clean wrapper-based tests" {
   run codebase lint:bats-raw-mise-dispatch "$FIXTURES/clean"
@@ -24,9 +22,7 @@ setup() {
   [[ "$output" == *"no test/ files found"* ]]
 }
 
-# ============================================================================
-# Invocation signatures — each form fails
-# ============================================================================
+# === Invocation signatures — each form fails ===
 
 @test "bats-raw-mise-dispatch: flags 'mise run -q <task>' in BATS test" {
   run codebase lint:bats-raw-mise-dispatch "$FIXTURES/dirty"
@@ -46,9 +42,7 @@ setup() {
   [[ "$output" == *"OK"* ]]
 }
 
-# ============================================================================
-# Allowlisted files
-# ============================================================================
+# === Allowlisted files ===
 
 @test "bats-raw-mise-dispatch: does NOT flag 'mise run' in test_helper.bash" {
   # The clean fixture has mise run in test_helper.bash (the wrapper
@@ -57,9 +51,7 @@ setup() {
   [ "$status" -eq 0 ]
 }
 
-# ============================================================================
-# Ignore directives
-# ============================================================================
+# === Ignore directives ===
 
 @test "bats-raw-mise-dispatch: inline '# codebase:ignore' suppresses a single line" {
   run codebase lint:bats-raw-mise-dispatch "$FIXTURES/ignored-inline"
@@ -73,9 +65,7 @@ setup() {
   [[ "$output" == *"SKIP"*"ignored-repo"* ]]
 }
 
-# ============================================================================
-# Output details
-# ============================================================================
+# === Output details ===
 
 @test "bats-raw-mise-dispatch: fail output includes file:line citations" {
   run codebase lint:bats-raw-mise-dispatch "$FIXTURES/dirty"
@@ -90,9 +80,7 @@ setup() {
   [[ "$output" == *"Call the Tool"* ]]
 }
 
-# ============================================================================
-# Error handling
-# ============================================================================
+# === Error handling ===
 
 @test "bats-raw-mise-dispatch: fails when no targets given" {
   run codebase lint:bats-raw-mise-dispatch
@@ -105,9 +93,7 @@ setup() {
   [[ "$output" == *"does not exist"* ]]
 }
 
-# ============================================================================
-# Multi-target
-# ============================================================================
+# === Multi-target ===
 
 @test "bats-raw-mise-dispatch: accepts multiple targets and reports each" {
   run codebase lint:bats-raw-mise-dispatch "$FIXTURES/clean" "$FIXTURES/dirty"
