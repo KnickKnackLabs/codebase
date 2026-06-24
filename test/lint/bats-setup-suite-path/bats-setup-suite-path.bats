@@ -7,9 +7,7 @@ setup() {
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
 }
 
-# ============================================================================
 # Detection
-# ============================================================================
 
 @test "lint: passes when no test/setup_suite.bash exists" {
   run codebase lint:bats-setup-suite-path "$FIXTURES/no-setup-suite"
@@ -72,9 +70,7 @@ setup() {
   [[ "$output" == *"OK"*"no-mise-env"* ]]
 }
 
-# ============================================================================
 # Error handling
-# ============================================================================
 
 @test "lint: fails when target does not exist" {
   run codebase lint:bats-setup-suite-path /nonexistent
