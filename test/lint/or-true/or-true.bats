@@ -7,9 +7,7 @@ setup() {
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
 }
 
-# ============================================================================
 # Detection
-# ============================================================================
 
 @test "or-true: passes on a clean codebase" {
   run codebase lint:or-true "$FIXTURES/clean"
@@ -76,9 +74,7 @@ setup() {
   [[ "$output" == *"if !"* ]]
 }
 
-# ============================================================================
 # Corpus-calibrated diagnostics
-# ============================================================================
 
 @test "or-true: arithmetic increments get a safer arithmetic suggestion" {
   local tmp
@@ -173,9 +169,7 @@ EOF
   [[ "$output" == *"Intentional cases need a rule-specific reason"* ]]
 }
 
-# ============================================================================
 # Ignore directives
-# ============================================================================
 
 @test "or-true: inline '# codebase:ignore or-true — reason' skips the line" {
   run codebase lint:or-true "$FIXTURES/ignored-inline"
@@ -189,9 +183,7 @@ EOF
   [[ "$output" == *"SKIP"*"ignored-file"* ]]
 }
 
-# ============================================================================
 # Scope / discovery
-# ============================================================================
 
 @test "or-true: walks the whole target — finds hits outside .mise/tasks and lib/" {
   run codebase lint:or-true "$FIXTURES/broad-walk"
@@ -213,9 +205,7 @@ EOF
   [[ "$output" == *"no shell files"* ]]
 }
 
-# ============================================================================
 # Discovery correctness
-# ============================================================================
 
 @test "or-true: discovery skips non-bash/sh shebangs (fish, zsh, …)" {
   # Regression: the shebang regex '^#!.*(bash|sh)\b' matched 'sh' as
@@ -255,9 +245,7 @@ EOF
   rm -rf "$tmp"
 }
 
-# ============================================================================
 # Comment handling
-# ============================================================================
 
 @test "or-true: does not flag '|| true' inside a single-quoted string" {
   # Accidental protection: the closing quote ''' is not in the
@@ -293,9 +281,7 @@ EOF
   rm -rf "$tmp"
 }
 
-# ============================================================================
 # Multi-target
-# ============================================================================
 
 @test "or-true: checks multiple targets and reports each" {
   run codebase lint:or-true "$FIXTURES/clean" "$FIXTURES/dirty"
@@ -309,9 +295,7 @@ EOF
   [ "$status" -eq 2 ]
 }
 
-# ============================================================================
 # Error paths
-# ============================================================================
 
 @test "or-true: fails when target does not exist" {
   run codebase lint:or-true "$FIXTURES/does-not-exist"
@@ -328,9 +312,7 @@ EOF
   [[ "$output" == *"<targets>"* ]]
 }
 
-# ============================================================================
 # Relative path resolution (regression: codebase#24)
-# ============================================================================
 
 @test "or-true: relative path resolves against CODEBASE_CALLER_PWD, not codebase install dir" {
   # Regression: when invoked via the shiv shim, relative paths resolved

@@ -24,9 +24,7 @@ EOF
   export CODEBASE_CALLER_PWD="$REPO"
 }
 
-# ============================================================================
 # Install — fresh repo
-# ============================================================================
 
 @test "install: creates dispatcher" {
   codebase pre-commit
@@ -97,9 +95,7 @@ EOF
   [ -x "$REPO/.git/hooks/pre-commit" ]
 }
 
-# ============================================================================
 # Install — existing dispatcher
-# ============================================================================
 
 @test "install: preserves existing dispatcher and other hooks" {
   mkdir -p "$REPO/.git/hooks/pre-commit.d"
@@ -121,9 +117,7 @@ EOF
   [ -f "$REPO/.git/hooks/pre-commit.d/codebase" ]
 }
 
-# ============================================================================
 # Install — existing plain hook (not a dispatcher)
-# ============================================================================
 
 @test "install: errors when existing plain hook is not a dispatcher" {
   cat > "$REPO/.git/hooks/pre-commit" <<'EOF'
@@ -137,9 +131,7 @@ EOF
   [[ "$output" == *"not a dispatcher"* ]]
 }
 
-# ============================================================================
 # Idempotent
-# ============================================================================
 
 @test "install: running twice is safe" {
   codebase pre-commit
@@ -149,9 +141,7 @@ EOF
   [ -f "$REPO/.git/hooks/pre-commit.d/codebase" ]
 }
 
-# ============================================================================
 # --check
-# ============================================================================
 
 @test "check: exits 0 when hook is current" {
   codebase pre-commit
@@ -189,9 +179,7 @@ EOF
   [ "$status" -ne 0 ]
 }
 
-# ============================================================================
 # --revert
-# ============================================================================
 
 @test "revert: removes codebase hook" {
   codebase pre-commit
@@ -225,9 +213,7 @@ EOF
   [[ "$output" == *"No codebase hook"* ]]
 }
 
-# ============================================================================
 # Scope
-# ============================================================================
 
 @test "scope: default scopes are delegated to aggregate lint" {
   cat > "$REPO/mise.toml" <<'EOF'
@@ -258,9 +244,7 @@ EOF
   ! grep -q 'src/scripts' "$REPO/.git/hooks/pre-commit.d/codebase"
 }
 
-# ============================================================================
 # Error handling
-# ============================================================================
 
 @test "error: fails outside git repo" {
   export CODEBASE_CALLER_PWD="$BATS_TEST_TMPDIR"
