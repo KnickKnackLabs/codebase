@@ -7,9 +7,7 @@ setup() {
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
 }
 
-# ============================================================================
 # Detection
-# ============================================================================
 
 @test "mise-run-quiet: passes on a clean codebase (no mise run calls)" {
   run codebase lint:mise-run-quiet "$FIXTURES/clean"
@@ -68,9 +66,7 @@ setup() {
   [[ "$output" == *"mise run -q"* ]]
 }
 
-# ============================================================================
 # Safe contexts
-# ============================================================================
 
 @test "mise-run-quiet: does not flag bare mise run (interactive)" {
   run codebase lint:mise-run-quiet "$FIXTURES/dirty-mixed"
@@ -99,9 +95,7 @@ setup() {
   [[ "$output" == *"OK"* ]]
 }
 
-# ============================================================================
 # Ignore mechanisms
-# ============================================================================
 
 @test "mise-run-quiet: respects file-level codebase:ignore" {
   run codebase lint:mise-run-quiet "$FIXTURES/ignored-file"
@@ -118,9 +112,7 @@ setup() {
   [[ "$output" != *"codebase:ignore mise-run-quiet"* ]]
 }
 
-# ============================================================================
 # Edge cases
-# ============================================================================
 
 @test "mise-run-quiet: skips directories with no shell files" {
   run codebase lint:mise-run-quiet "$FIXTURES/no-shell-files"
