@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#USAGE flag "-e --exclude <excludes>" help="Patterns to exclude"
+usage_excludes="*.tmp"
+echo "mismatched flag/placeholder"

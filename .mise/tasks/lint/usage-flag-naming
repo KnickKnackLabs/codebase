@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+#MISE description="Flag #USAGE flag directives where flag name and placeholder produce different usage_* env var names"
+#USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+#USAGE example "codebase lint:usage-flag-naming ." header="Flag mismatched USAGE flag/placeholder"
+#USAGE example "codebase lint:usage-flag-naming /path/to/repo" header="Check a specific repo"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/shell-files.sh
+source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
+# shellcheck source=../../../lib/usage-parser.sh
+source "$MISE_CONFIG_ROOT/lib/usage-parser.sh"
+
+IFS=' ' read -ra TARGETS <<< "${usage_targets}"
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+  echo "ERROR: at least one target is required" >&2
+  exit 1
+fi
+
+for i in "${!TARGETS[@]}"; do
+  TARGETS[$i]=$(resolve_target "${TARGETS[$i]}")
+done
+
+failures=0
+
+for target in "${TARGETS[@]}"; do
+  if [[ ! -e "$target" ]]; then
+    echo "ERROR: target does not exist: $target" >&2
+    exit 1
+  fi
+
+  name=$(basename "$target")
+
+  # File-level ignore via mise.toml
+  toml="$target/mise.toml"
+  if [[ -f "$toml" ]] && grep -q 'codebase:ignore usage-flag-naming' "$toml" 2>/dev/null; then
+    echo "SKIP  $name (codebase:ignore)"
+    continue
+  fi
+
+  tasks_dir="$target/.mise/tasks"
+  if [[ ! -d "$tasks_dir" ]]; then
+    echo "OK    $name (no .mise/tasks directory)"
+    continue
+  fi
+
+  # Discover task files
+  task_files=()
+  while IFS= read -r f; do
+    [[ -n "$f" ]] && task_files+=("$f")
+  done < <(discover_task_files "$target")
+
+  if [[ ${#task_files[@]} -eq 0 ]]; then
+    echo "OK    $name (no task files found)"
+    continue
+  fi
+
+  target_failures=0
+  target_output=""
+
+  for task_file in "${task_files[@]}"; do
+    rel="${task_file#"$target/"}"
+
+    while IFS=$'\t' read -r lineno flag_name placeholder; do
+      [[ -z "$lineno" ]] && continue
+
+      # Boolean flag (no placeholder) — skip
+      [[ -z "$placeholder" ]] && continue
+
+      flag_env=$(usage_env_name "$flag_name")
+      placeholder_env=$(usage_env_name "$placeholder")
+
+      if [[ "$flag_env" != "$placeholder_env" ]]; then
+        target_failures=$((target_failures + 1))
+        target_output+="  $rel:$lineno: --${flag_name#--} ($flag_env) vs <$placeholder> ($placeholder_env)"$'\n'
+      fi
+    done < <(parse_usage_flags "$task_file")
+  done
+
+  if [[ "$target_failures" -gt 0 ]]; then
+    echo "FAIL  $name: $target_failures flag/placeholder mismatch(es)"
+    printf '%s' "$target_output"
+    echo "  hint: use '--flag-name <flag_name>' so mise's usage_* env var matches what the task reads"
+    echo "        or annotate with '# codebase:ignore=usage-flag-naming -- reason'"
+    failures=$((failures + 1))
+  else
+    echo "OK    $name (${#task_files[@]} file(s) clean)"
+  fi
+done
+
+exit "$failures"

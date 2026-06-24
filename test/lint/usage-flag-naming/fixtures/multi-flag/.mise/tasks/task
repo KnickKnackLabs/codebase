@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#USAGE flag "--verbose"
+#USAGE flag "--name <name>" help="Name to use"
+usage_verbose=true
+usage_name="default"
+echo "multi-flag task"

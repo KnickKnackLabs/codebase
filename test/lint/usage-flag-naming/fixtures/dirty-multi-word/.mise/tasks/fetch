@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#USAGE flag "--search-path <search-paths>" help="Directories to search"
+usage_search_paths="./src"
+echo "multi-word mismatch"
