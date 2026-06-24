@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Helper — no exec redirections.
+
+safe_cmd() {
+  local arg="$1"
+  echo "$arg"
+}
+
+other_cmd() {
+  exec 3<>"$1"
+  # No stderr suppression — safe
+}
