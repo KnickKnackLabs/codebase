@@ -7,9 +7,7 @@ setup() {
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
 }
 
-# ============================================================================
 # Pass paths
-# ============================================================================
 
 @test "bats-python-one-liner: passes on clean codebase with heredoc Python" {
   run codebase lint:bats-python-one-liner "$FIXTURES/clean"
@@ -30,9 +28,7 @@ setup() {
   [[ "$output" == *"OK"* ]]
 }
 
-# ============================================================================
 # Detection
-# ============================================================================
 
 @test "bats-python-one-liner: flags python3 -c with assert" {
   run codebase lint:bats-python-one-liner "$FIXTURES/dirty-assert"
@@ -57,9 +53,7 @@ setup() {
   [[ "$output" == *"assert"* ]]
 }
 
-# ============================================================================
 # False positives — these should NOT be flagged
-# ============================================================================
 
 @test "bats-python-one-liner: does NOT flag heredoc Python" {
   run codebase lint:bats-python-one-liner "$FIXTURES/heredoc"
@@ -67,9 +61,7 @@ setup() {
   [[ "$output" == *"OK"* ]]
 }
 
-# ============================================================================
 # Ignore directives
-# ============================================================================
 
 @test "bats-python-one-liner: inline '# codebase:ignore' suppresses a single line" {
   run codebase lint:bats-python-one-liner "$FIXTURES/ignored-inline"
@@ -83,9 +75,7 @@ setup() {
   [[ "$output" == *"SKIP"*"ignored-file"* ]]
 }
 
-# ============================================================================
 # Output details
-# ============================================================================
 
 @test "bats-python-one-liner: fail output includes file:line citations" {
   run codebase lint:bats-python-one-liner "$FIXTURES/dirty-assert"
@@ -100,9 +90,7 @@ setup() {
   [[ "$output" == *"heredoc"* ]]
 }
 
-# ============================================================================
 # Error handling
-# ============================================================================
 
 @test "bats-python-one-liner: fails when no targets given" {
   run codebase lint:bats-python-one-liner
@@ -115,9 +103,7 @@ setup() {
   [[ "$output" == *"does not exist"* ]]
 }
 
-# ============================================================================
 # Multi-target
-# ============================================================================
 
 @test "bats-python-one-liner: accepts multiple targets and reports each" {
   run codebase lint:bats-python-one-liner "$FIXTURES/clean" "$FIXTURES/dirty-assert"
