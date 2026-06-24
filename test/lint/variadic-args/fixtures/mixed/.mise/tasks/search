@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+#MISE description="Mixed — one good, one bad"
+#USAGE flag "--query <query>" var=#true help="Search queries"
+#USAGE flag "--exclude <exclude>" var=#true help="Exclusion patterns"
+set -euo pipefail
+
+# Good: uses xargs pattern for --exclude
+EXCLUDE=()
+if [ -n "${usage_exclude:-}" ]; then
+  while IFS= read -r arg; do
+    EXCLUDE+=("$arg")
+  done < <(printf '%s' "$usage_exclude" | xargs printf '%s\n')
+fi
+
+# Bad: uses read -ra for --query (loses quoting)
+read -ra QUERIES <<< "$usage_query"
+
+for q in "${QUERIES[@]}"; do
+  echo "searching: $q"
+done

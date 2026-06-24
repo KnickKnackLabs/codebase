@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+#MISE description="Bad task — uses read -ra"
+#USAGE flag "--query <query>" var=#true help="Search queries"
+set -euo pipefail
+
+read -ra QUERIES <<< "$usage_query"
+
+for q in "${QUERIES[@]}"; do
+  echo "query: $q"
+done

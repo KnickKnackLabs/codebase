@@ -1,0 +1,5 @@
+[tools]
+bash = "latest"
+
+[_.codebase]
+codebase:ignore variadic-args

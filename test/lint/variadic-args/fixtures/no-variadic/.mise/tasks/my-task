@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="No variadic — read -ra on non-variadic var"
+#USAGE flag "--name <name>" help="A single name (not variadic)"
+set -euo pipefail
+
+read -ra PARTS <<< "$usage_name"
+echo "first part: ${PARTS[0]}"
