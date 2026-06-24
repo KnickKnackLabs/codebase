@@ -62,7 +62,7 @@ printf "%s\n" "$TARGET"')
 @test "fails when runtime exports legacy CALLER_PWD" {
   target=$(make_pkg bad-export '#!/usr/bin/env bash
 export CALLER_PWD="$PWD"
-exec mise run "$@"')
+exec mise run "$@"')  # codebase:ignore bats-raw-mise-dispatch — wrapper fixture, not test dispatch
 
   run codebase lint:caller-pwd-contract "$target"
   [ "$status" -eq 1 ]
@@ -71,7 +71,7 @@ exec mise run "$@"')
 
 @test "fails when runtime assigns legacy CALLER_PWD" {
   target=$(make_pkg bad-assign '#!/usr/bin/env bash
-CALLER_PWD="$PWD" exec mise run "$@"')
+CALLER_PWD="$PWD" exec mise run "$@"')  # codebase:ignore bats-raw-mise-dispatch — wrapper fixture, not test dispatch
 
   run codebase lint:caller-pwd-contract "$target"
   [ "$status" -eq 1 ]
