@@ -7,9 +7,7 @@ setup() {
   source "$REPO_DIR/lib/shell-files.sh"
 }
 
-# ============================================================================
 # resolve_target
-# ============================================================================
 
 @test "resolve_target: absolute path passes through unchanged" {
   result=$(resolve_target "/some/absolute/path")

@@ -7,9 +7,7 @@ setup() {
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
 }
 
-# ============================================================================
 # Detection
-# ============================================================================
 
 @test "mcr-scope: passes on a clean codebase" {
   run codebase lint:mcr-scope "$FIXTURES/clean"
@@ -102,9 +100,7 @@ setup() {
   [[ "$output" == *"no test/ or lib/ files found"* ]]
 }
 
-# ============================================================================
 # Ignore directives
-# ============================================================================
 
 @test "mcr-scope: inline '# codebase:ignore' suppresses a single line" {
   run codebase lint:mcr-scope "$FIXTURES/ignored-inline"
@@ -118,9 +114,7 @@ setup() {
   [[ "$output" == *"SKIP"*"ignored-file"* ]]
 }
 
-# ============================================================================
 # Output details
-# ============================================================================
 
 @test "mcr-scope: fail output includes file:line citations" {
   run codebase lint:mcr-scope "$FIXTURES/dirty-lib"
@@ -136,9 +130,7 @@ setup() {
   [[ "$output" == *"BASH_SOURCE"* ]]
 }
 
-# ============================================================================
 # Error handling
-# ============================================================================
 
 @test "mcr-scope: fails when no targets given" {
   run codebase lint:mcr-scope
@@ -153,9 +145,7 @@ setup() {
   [[ "$output" == *"does not exist"* ]]
 }
 
-# ============================================================================
 # Multi-target
-# ============================================================================
 
 @test "mcr-scope: accepts multiple targets and reports each" {
   run codebase lint:mcr-scope "$FIXTURES/clean" "$FIXTURES/dirty-test"

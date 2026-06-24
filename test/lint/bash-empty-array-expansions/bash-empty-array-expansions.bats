@@ -7,9 +7,7 @@ setup() {
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
 }
 
-# ============================================================================
 # Detection
-# ============================================================================
 
 @test "bash-empty-array-expansions: passes on a clean codebase" {
   run codebase lint:bash-empty-array-expansions "$FIXTURES/clean"
@@ -45,9 +43,7 @@ setup() {
   [ "$status" -eq 0 ]
 }
 
-# ============================================================================
 # Safe contexts
-# ============================================================================
 
 @test "bash-empty-array-expansions: does not flag 'for item in \"\${items[@]}\"'" {
   run codebase lint:bash-empty-array-expansions "$FIXTURES/safe-context"
@@ -64,9 +60,7 @@ setup() {
   [ "$status" -eq 0 ]
 }
 
-# ============================================================================
 # Ignore mechanisms
-# ============================================================================
 
 @test "bash-empty-array-expansions: respects inline ignore" {
   run codebase lint:bash-empty-array-expansions "$FIXTURES/ignored-inline"
@@ -79,9 +73,7 @@ setup() {
   [[ "$output" == *"SKIP"* ]]
 }
 
-# ============================================================================
 # Edge cases
-# ============================================================================
 
 @test "bash-empty-array-expansions: handles missing mise.toml gracefully" {
   run codebase lint:bash-empty-array-expansions "$FIXTURES/no-toml"
@@ -95,9 +87,7 @@ setup() {
   [[ "$output" == *"lib/helper.sh"* ]]
 }
 
-# ============================================================================
 # Dynamic test: various variable names
-# ============================================================================
 
 @test "bash-empty-array-expansions: flags different variable names" {
   local tmp
