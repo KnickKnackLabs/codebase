@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="A simple helper — no USAGE directives at all"
+set -euo pipefail
+echo "Hello"

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Internal tool — hidden from --help"
+#MISE hide=true
+#USAGE arg "<token>" help="Auth token"
+set -euo pipefail
+echo "Internal task running with token: ${usage_token}"

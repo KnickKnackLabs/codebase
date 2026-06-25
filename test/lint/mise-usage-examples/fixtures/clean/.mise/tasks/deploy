@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Deploy the app"
+#USAGE flag "--env <env>" help="Target environment"
+#USAGE example "mise run deploy --env staging" header="Deploy to staging"
+set -euo pipefail
+echo "Deploying to ${usage_env:-production}..."

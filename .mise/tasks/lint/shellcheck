@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Run shellcheck against shell files in a codebase"
 #USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+#USAGE example "codebase lint:shellcheck ." header="Run shellcheck on repo"
 
 set -euo pipefail
 

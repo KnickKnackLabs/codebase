@@ -1,5 +1,6 @@
 # AGENTS.md — codebase
 
+<<<<<<< HEAD
 **Structural code analysis, linting & migrations.** A toolbox of convention lints, AST-based scanning, and codemod migrations for KnickKnackLabs repos. Designed to be used as a shiv dependency by other repos.
 
 ## Commands
@@ -28,6 +29,7 @@
 | `github-actions` | Lints workflows and creates a default KKL workflow when missing |
 | `bash-empty-array-expansions` | Flags empty array expansions under nounset (macOS Bash 3.2 compat) |
 | `usage-flag-naming` | Detects #USAGE flag directives where flag name and arg placeholder produce different `usage_*` env var names (flag silently does nothing) |
+| `mise-usage-examples` | Enforce #USAGE example directives for public argument-bearing `mise` tasks |
 
 ## Install
 

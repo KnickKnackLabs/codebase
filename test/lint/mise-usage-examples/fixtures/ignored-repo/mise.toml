@@ -1,0 +1,4 @@
+[_.codebase]
+lint = ["mise-settings"]
+
+codebase:ignore mise-usage-examples

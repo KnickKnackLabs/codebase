@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Enable verbose output"
+#USAGE flag "--verbose" help="Enable verbose output"
+set -euo pipefail
+echo "Verbose mode: ${usage_verbose:-off}"
