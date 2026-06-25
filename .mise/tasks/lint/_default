@@ -19,6 +19,13 @@ if [[ ! -f "$TOML" ]]; then
   exit 1
 fi
 
+# Check if the original config uses groups, for preamble display.
+ORIG_LINT="$(mise config get -f "$TOML" _.codebase.lint 2>/dev/null || true)"
+HAS_GROUPS=false
+if [[ "$ORIG_LINT" == *"@"* ]]; then
+  HAS_GROUPS=true
+fi
+
 RULES=()
 while IFS= read -r rule; do
   [[ -n "$rule" ]] && RULES+=("$rule")
@@ -29,7 +36,14 @@ if [[ ${#RULES[@]} -eq 0 ]]; then
   echo "Add to mise.toml:" >&2
   echo '  [_.codebase]' >&2
   echo '  lint = ["mise-settings", "gum-table"]' >&2
+  echo "  # Or use a preset group:" >&2
+  echo '  # lint = ["@maintained-tool"]' >&2
+  echo "  # See 'mise run lint:groups' for available groups" >&2
   exit 1
+fi
+
+if $HAS_GROUPS; then
+  echo "codebase: expanded ${#RULES[@]} rule(s) from lint groups"
 fi
 
 failures=0

@@ -8,6 +8,8 @@
 _CODEBASE_CONFIG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./shell-files.sh
 source "$_CODEBASE_CONFIG_LIB_DIR/shell-files.sh"
+# shellcheck source=./lint-groups.sh
+source "$_CODEBASE_CONFIG_LIB_DIR/lint-groups.sh"
 
 # codebase_git_root <path>
 #
@@ -56,8 +58,9 @@ codebase_resolve_repo() {
 
 # codebase_configured_lint_rules <repo-root>
 #
-# Emit configured [_.codebase].lint rules, one per line. Rule names are expected
-# to be simple task suffixes such as "mise-settings" or "gum-table".
+# Emit configured [_.codebase].lint rules, one per line, with @group
+# references expanded and any excluded rules removed. Rule names are simple
+# task suffixes such as "mise-settings" or "gum-table".
 codebase_configured_lint_rules() {
   local repo_root="$1"
   local toml="$repo_root/mise.toml"
@@ -69,10 +72,53 @@ codebase_configured_lint_rules() {
     return 0
   fi
 
-  printf '%s\n' "$raw" | awk '{
+  # Parse raw TOML array values into an array of rule names.
+  local -a parsed
+  while IFS= read -r token; do
+    [[ -n "$token" ]] && parsed+=("$token")
+  done < <(printf '%s\n' "$raw" | awk '{
     gsub(/[\[\]",]/, " ")
     for (i = 1; i <= NF; i++) print $i
-  }'
+  }')
+
+  # Expand @group references.
+  local -a expanded
+  if codebase_has_group_reference "${parsed[@]}"; then
+    while IFS= read -r rule; do
+      [[ -n "$rule" ]] && expanded+=("$rule")
+    done < <(codebase_expand_lint_groups "${parsed[@]}")
+  else
+    expanded=("${parsed[@]}")
+  fi
+
+  # Apply [_.codebase].lint_exclude if present.
+  local excludes_raw
+  excludes_raw=$(mise config get -f "$toml" _.codebase.lint_exclude 2>/dev/null || true)
+  if [[ -n "$excludes_raw" ]]; then
+    local -a exclude_list
+    while IFS= read -r ex; do
+      local clean
+      clean=$(printf '%s' "$ex" | tr -d '[]," ')
+      [[ -n "$clean" ]] && exclude_list+=("$clean")
+    done < <(printf '%s\n' "$excludes_raw" | awk '{
+      gsub(/[\[\]",]/, " ")
+      for (i = 1; i <= NF; i++) print $i
+    }')
+
+    local -a filtered
+    local rule skip
+    for rule in "${expanded[@]}"; do
+      skip=false
+      for ex in "${exclude_list[@]}"; do
+        [[ "$rule" == "$ex" ]] && { skip=true; break; }
+      done
+      $skip && continue
+      filtered+=("$rule")
+    done
+    expanded=("${filtered[@]}")
+  fi
+
+  printf '%s\n' "${expanded[@]}"
 }
 
 # codebase_default_scope_for_rule <rule>
