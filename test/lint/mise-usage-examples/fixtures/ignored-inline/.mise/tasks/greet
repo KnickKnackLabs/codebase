@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Greet the user"
+#USAGE arg "<name>" help="Name to greet"
+# codebase:ignore mise-usage-examples -- intentionally bare, this is an internal wrapper
+set -euo pipefail
+echo "Hello, ${usage_name}!"

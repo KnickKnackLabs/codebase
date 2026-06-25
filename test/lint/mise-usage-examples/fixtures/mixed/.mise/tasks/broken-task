@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Broken task — missing example"
+#USAGE arg "<path>" help="Path to process"
+set -euo pipefail
+echo "Processing ${usage_path}..."

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Forbid MISE_CONFIG_ROOT in test/ and lib/ (use BATS_TEST_DIRNAME or BASH_SOURCE instead)"
 #USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+#USAGE example "codebase lint:mcr-scope ." header="Check for MISE_CONFIG_ROOT misuse in test/lib"
 
 set -euo pipefail
 
