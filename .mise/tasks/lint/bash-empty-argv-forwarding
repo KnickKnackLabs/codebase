@@ -36,7 +36,7 @@ for i in "${!TARGETS[@]}"; do
   TARGETS[i]=$(resolve_target "${TARGETS[i]}")
 done
 
-# ── Helpers ──────────────────────────────────────────────────────────────
+# Helpers
 
 # has_nounset <file>
 # Returns 0 if the file enables nounset via any form:
@@ -62,7 +62,9 @@ is_safe_context() {
 # Returns 0 if the line already uses the alternate-value safe form.
 has_safe_form() {
   local line="$1"
+  # shellcheck disable=SC2016  # intentional: match literal '${@+"$@"}'
   [[ "$line" == *'${@+"$@"}'* ]] && return 0
+  # shellcheck disable=SC2016  # intentional: match literal '${@+"${@}"}'
   [[ "$line" == *'${@+"${@}"}'* ]] && return 0
   return 1
 }
@@ -108,7 +110,7 @@ scan_file() {
   done < "$file"
 }
 
-# ── Main ──────────────────────────────────────────────────────────────────
+# Main
 
 failures=0
 
