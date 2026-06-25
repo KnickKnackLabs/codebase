@@ -14,7 +14,7 @@ copy_fixture() {
   echo "$dest"
 }
 
-# ── direct enforcement ──────────────────────────────────────────────────────
+# === direct enforcement ===
 
 @test "lint: passes when aggregate codebase lint is in workflow" {
   run codebase lint:ci-lint-enforcement "$FIXTURES/enforced-direct"
@@ -23,7 +23,7 @@ copy_fixture() {
   [[ "$output" == *"2 rule(s)"* ]]
 }
 
-# ── indirect enforcement via local task ─────────────────────────────────────
+# === indirect enforcement via local task ===
 
 @test "lint: passes when aggregate lint runs through local task delegation" {
   run codebase lint:ci-lint-enforcement "$FIXTURES/enforced-indirect"
@@ -32,7 +32,7 @@ copy_fixture() {
   [[ "$output" == *"3 rule(s)"* ]]
 }
 
-# ── missing enforcement ─────────────────────────────────────────────────────
+# === missing enforcement ===
 
 @test "lint: fails when lint configured but not enforced in CI" {
   run codebase lint:ci-lint-enforcement "$FIXTURES/missing-enforcement"
@@ -41,7 +41,7 @@ copy_fixture() {
   [[ "$output" == *"no aggregate enforcement in CI"* ]]
 }
 
-# ── hard-coded per-rule loop ────────────────────────────────────────────────
+# === hard-coded per-rule loop ===
 
 @test "lint: warns on hard-coded per-rule loops" {
   run codebase lint:ci-lint-enforcement "$FIXTURES/hardcoded-loop"
@@ -51,7 +51,7 @@ copy_fixture() {
   [[ "$output" == *"3 per-rule invocation(s)"* ]]
 }
 
-# ── no lint config → skip ───────────────────────────────────────────────────
+# === no lint config → skip ===
 
 @test "lint: skips when no [_.codebase].lint is configured" {
   run codebase lint:ci-lint-enforcement "$FIXTURES/no-config"
@@ -60,7 +60,7 @@ copy_fixture() {
   [[ "$output" == *"no [_.codebase].lint configured"* ]]
 }
 
-# ── codebase:ignore ────────────────────────────────────────────────────────
+# === codebase:ignore ===
 
 @test "lint: skips when codebase:ignore ci-lint-enforcement is set" {
   run codebase lint:ci-lint-enforcement "$FIXTURES/ignored"
@@ -68,7 +68,7 @@ copy_fixture() {
   [[ "$output" == *"SKIP"*"ignored"* ]]
 }
 
-# ── --fix mode ──────────────────────────────────────────────────────────────
+# === --fix mode ===
 
 @test "fix: adds aggregate lint step to workflow when missing" {
   target=$(copy_fixture missing-enforcement)
@@ -118,7 +118,7 @@ copy_fixture() {
   grep -q 'Run codebase lints' "$target/.github/workflows/test.yml"
 }
 
-# ── edge cases ──────────────────────────────────────────────────────────────
+# === edge cases ===
 
 @test "lint: fails when lint configured but no workflows exist" {
   run codebase lint:ci-lint-enforcement "$FIXTURES/no-workflows"
