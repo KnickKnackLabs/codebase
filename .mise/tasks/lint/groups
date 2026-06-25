@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+#MISE description="List available lint groups and their rule membership"
+#USAGE flag "-a --all" help="Show expanded rule count for each group (default: only group names)"
+#USAGE example "mise run lint:groups" header="List available groups"
+#USAGE example "mise run lint:groups --all" header="Show groups with expanded rule details"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/lint-groups.sh
+source "$MISE_CONFIG_ROOT/lib/lint-groups.sh"
+
+ALL="${usage_all:-false}"
+
+groups=()
+while IFS= read -r g; do
+  [[ -n "$g" ]] && groups+=("$g")
+done < <(codebase_available_groups)
+
+if [[ ${#groups[@]} -eq 0 ]]; then
+  echo "No lint groups defined."
+  exit 0
+fi
+
+echo "Available lint groups:"
+echo ""
+
+for group in "${groups[@]}"; do
+  echo "  $group"
+  if [[ "$ALL" == "true" ]]; then
+    members=()
+    while IFS= read -r rule; do
+      [[ -n "$rule" ]] && members+=("$rule")
+    done < <(codebase_group_members "$group")
+    for rule in "${members[@]}"; do
+      echo "    - $rule"
+    done
+    echo ""
+  fi
+done
+
+if [[ "$ALL" != "true" ]]; then
+  echo "  (use --all to see expanded rules for each group)"
+fi
+
+echo ""
+echo "Usage in mise.toml:"
+echo '  [_.codebase]'
+echo '  lint = ["@maintained-tool"]'
+echo ""
+echo "Exclude a rule:"
+echo '  [_.codebase]'
+echo '  lint = ["@maintained-tool"]'
+echo '  lint_exclude = ["caller-pwd-contract"]'
