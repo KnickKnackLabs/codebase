@@ -43,9 +43,7 @@ for i in "${!TARGETS[@]}"; do
   TARGETS[$i]=$(resolve_target "${TARGETS[$i]}")
 done
 
-# ---------------------------------------------------------------------------
-# Phase 1 helpers: parse #USAGE directives to extract variadic env var names
-# ---------------------------------------------------------------------------
+# === Phase 1 helpers: parse #USAGE directives to extract variadic env var names ===
 
 # collect_variadic_vars <task_file>
 #
@@ -85,9 +83,7 @@ collect_variadic_vars() {
   done < "$file"
 }
 
-# ---------------------------------------------------------------------------
-# Phase 2 helpers: scan file for dangerous consumption patterns
-# ---------------------------------------------------------------------------
+# === Phase 2 helpers: scan file for dangerous consumption patterns ===
 
 # Patterns for dangerous variadic consumption.
 # These match the *variable reference* side — we cross-reference against
@@ -214,9 +210,7 @@ scan_file() {
   fi
 }
 
-# ---------------------------------------------------------------------------
-# Main loop
-# ---------------------------------------------------------------------------
+# === Main loop ===
 
 failures=0
 

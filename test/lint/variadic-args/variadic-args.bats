@@ -7,9 +7,7 @@ setup() {
   FIXTURES="$BATS_TEST_DIRNAME/fixtures"
 }
 
-# ============================================================================
-# Pass paths
-# ============================================================================
+# === Pass paths ===
 
 @test "variadic-args: passes on task using xargs pattern (correct)" {
   run codebase lint:variadic-args "$FIXTURES/clean"
@@ -38,9 +36,7 @@ setup() {
   [[ "$output" != *"read -ra"* ]]
 }
 
-# ============================================================================
-# Failure modes
-# ============================================================================
+# === Failure modes ===
 
 @test "variadic-args: flags eval ARGS=(\${usage_args:-}) as ERROR" {
   run codebase lint:variadic-args "$FIXTURES/dirty-eval"
@@ -88,9 +84,7 @@ setup() {
   [[ "$output" != *"clean-task"* ]]
 }
 
-# ============================================================================
-# Ignore mechanisms
-# ============================================================================
+# === Ignore mechanisms ===
 
 @test "variadic-args: respects inline # codebase:ignore — reason" {
   run codebase lint:variadic-args "$FIXTURES/ignored-inline"
@@ -104,9 +98,7 @@ setup() {
   [[ "$output" == *"SKIP"*"ignored-file"* ]]
 }
 
-# ============================================================================
-# Multi-target
-# ============================================================================
+# === Multi-target ===
 
 @test "variadic-args: checks multiple targets and reports each" {
   run codebase lint:variadic-args "$FIXTURES/clean" "$FIXTURES/dirty-eval"
@@ -120,9 +112,7 @@ setup() {
   [ "$status" -eq 2 ]
 }
 
-# ============================================================================
-# Error paths
-# ============================================================================
+# === Error paths ===
 
 @test "variadic-args: fails when target does not exist" {
   run codebase lint:variadic-args "$FIXTURES/does-not-exist"
@@ -137,9 +127,7 @@ setup() {
   [[ "$output" == *"<targets>"* ]]
 }
 
-# ============================================================================
-# Edge cases
-# ============================================================================
+# === Edge cases ===
 
 @test "variadic-args: does NOT flag eval/read -ra on non-variadic env vars" {
   # no-variadic fixture has read -ra on $usage_name which is not variadic
@@ -190,9 +178,7 @@ EOF
   rm -rf "$tmp"
 }
 
-# ============================================================================
-# Relative path resolution (regression: codebase#24)
-# ============================================================================
+# === Relative path resolution (regression: codebase#24) ===
 
 @test "variadic-args: relative path resolves against CODEBASE_CALLER_PWD, not codebase install dir" {
   local tmp
