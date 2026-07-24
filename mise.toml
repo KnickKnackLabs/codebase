@@ -6,5 +6,8 @@ actionlint = "1.7.12"
 ripgrep = "14.1.1"
 fd = "10.2.0"
 
+[_.codebase]
+name = "codebase"
+
 [settings]
 quiet = true
