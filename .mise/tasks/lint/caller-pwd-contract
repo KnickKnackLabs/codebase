@@ -4,8 +4,8 @@
 
 set -euo pipefail
 
-# shellcheck source=../../../lib/shell-files.sh
-source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
+# shellcheck source=../../../lib/codebase-config.sh
+source "$MISE_CONFIG_ROOT/lib/codebase-config.sh"
 
 IFS=' ' read -ra TARGETS <<< "${usage_targets}"
 
@@ -21,11 +21,7 @@ done
 caller_var_for_target() {
   local target="$1"
   local name var
-  target="${target%/}"
-  if [[ "$(basename "$target")" == "." || "$(basename "$target")" == ".." ]]; then
-    target=$(cd "$target" && pwd -P)
-  fi
-  name=$(basename "$target")
+  name=$(codebase_name "$target")
   var=$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9_]/_/g')
   case "$var" in
     [A-Z_]*) ;;
