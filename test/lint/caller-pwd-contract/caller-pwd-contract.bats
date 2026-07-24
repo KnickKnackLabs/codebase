@@ -38,6 +38,20 @@ printf "%s\n" "$TARGET"')
   [[ "$output" == *"expects SHIMMER_CALLER_PWD"* ]]
 }
 
+@test "configured codebase name survives a renamed checkout directory" {
+  target=$(make_pkg notes-review '#!/usr/bin/env bash
+TARGET="${NOTES_CALLER_PWD:-${CALLER_PWD:-.}}"
+printf "%s\n" "$TARGET"')
+  cat > "$target/mise.toml" <<'TOML'
+[_.codebase]
+name = "notes"
+TOML
+
+  run codebase lint:caller-pwd-contract "$target"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"expects NOTES_CALLER_PWD"* ]]
+}
+
 @test "fails on SHIV_CALLER_PWD in a non-shiv package" {
   target=$(make_pkg shimmer '#!/usr/bin/env bash
 TARGET="${SHIV_CALLER_PWD:-${CALLER_PWD:-.}}"

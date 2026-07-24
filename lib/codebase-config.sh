@@ -54,6 +54,27 @@ codebase_resolve_repo() {
   (cd "$(dirname "$resolved")" && pwd -P)
 }
 
+# codebase_name <target>
+#
+# Emit the stable machine name configured at [_.codebase].name. Fall back to
+# the repository directory name for codebases that have not declared one.
+codebase_name() {
+  local target="$1"
+  local repo_root toml value
+
+  repo_root=$(codebase_resolve_repo "$target") || return 1
+  toml="$repo_root/mise.toml"
+
+  if [[ -f "$toml" ]] && value=$(mise config get -f "$toml" _.codebase.name 2>/dev/null); then
+    if [[ -n "$value" ]]; then
+      printf '%s\n' "$value"
+      return 0
+    fi
+  fi
+
+  basename "$repo_root"
+}
+
 # codebase_configured_lint_rules <repo-root>
 #
 # Emit configured [_.codebase].lint rules, one per line. Rule names are expected
