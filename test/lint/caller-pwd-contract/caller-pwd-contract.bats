@@ -9,19 +9,19 @@ setup() {
 }
 
 make_pkg() {
-  local name="$1"
-  local body="$2"
-  local dir="$WORK/$name"
+  local dir="$1"
   mkdir -p "$dir/.mise/tasks"
-  printf '%s\n' "$body" > "$dir/.mise/tasks/demo"
+  cat > "$dir/.mise/tasks/demo"
   chmod +x "$dir/.mise/tasks/demo"
-  echo "$dir"
 }
 
 @test "passes when package-specific caller var precedes legacy fallback" {
-  target=$(make_pkg clean '#!/usr/bin/env bash
+  target="$WORK/clean"
+  make_pkg "$target" <<'BASH'
+#!/usr/bin/env bash
 TARGET="${CLEAN_CALLER_PWD:-${CALLER_PWD:-.}}"
-printf "%s\n" "$TARGET"')
+printf "%s\n" "$TARGET"
+BASH
 
   run codebase lint:caller-pwd-contract "$target"
   [ "$status" -eq 0 ]
@@ -29,9 +29,12 @@ printf "%s\n" "$TARGET"')
 }
 
 @test "dot target derives package name from physical repo directory" {
-  target=$(make_pkg shimmer '#!/usr/bin/env bash
+  target="$WORK/shimmer"
+  make_pkg "$target" <<'BASH'
+#!/usr/bin/env bash
 TARGET="${SHIMMER_CALLER_PWD:-${CALLER_PWD:-.}}"
-printf "%s\n" "$TARGET"')
+printf "%s\n" "$TARGET"
+BASH
 
   CODEBASE_CALLER_PWD="$target" run codebase lint:caller-pwd-contract .
   [ "$status" -eq 0 ]
@@ -39,9 +42,12 @@ printf "%s\n" "$TARGET"')
 }
 
 @test "configured codebase name survives a renamed checkout directory" {
-  target=$(make_pkg notes-review '#!/usr/bin/env bash
+  target="$WORK/notes-review"
+  make_pkg "$target" <<'BASH'
+#!/usr/bin/env bash
 TARGET="${NOTES_CALLER_PWD:-${CALLER_PWD:-.}}"
-printf "%s\n" "$TARGET"')
+printf "%s\n" "$TARGET"
+BASH
   cat > "$target/mise.toml" <<'TOML'
 [_.codebase]
 name = "notes"
@@ -53,9 +59,12 @@ TOML
 }
 
 @test "fails on SHIV_CALLER_PWD in a non-shiv package" {
-  target=$(make_pkg shimmer '#!/usr/bin/env bash
+  target="$WORK/shimmer"
+  make_pkg "$target" <<'BASH'
+#!/usr/bin/env bash
 TARGET="${SHIV_CALLER_PWD:-${CALLER_PWD:-.}}"
-printf "%s\n" "$TARGET"')
+printf "%s\n" "$TARGET"
+BASH
 
   run codebase lint:caller-pwd-contract "$target"
   [ "$status" -eq 1 ]
@@ -64,9 +73,12 @@ printf "%s\n" "$TARGET"')
 }
 
 @test "fails on any non-package caller var, not just SHIV_CALLER_PWD" {
-  target=$(make_pkg modules '#!/usr/bin/env bash
+  target="$WORK/modules"
+  make_pkg "$target" <<'BASH'
+#!/usr/bin/env bash
 TARGET="${THREADS_CALLER_PWD:-.}"
-printf "%s\n" "$TARGET"')
+printf "%s\n" "$TARGET"
+BASH
 
   run codebase lint:caller-pwd-contract "$target"
   [ "$status" -eq 1 ]
@@ -74,9 +86,12 @@ printf "%s\n" "$TARGET"')
 }
 
 @test "fails when runtime exports legacy CALLER_PWD" {
-  target=$(make_pkg bad-export '#!/usr/bin/env bash
+  target="$WORK/bad-export"
+  make_pkg "$target" <<'BASH'
+#!/usr/bin/env bash
 export CALLER_PWD="$PWD"
-exec mise run "$@"')
+exec mise run "$@"
+BASH
 
   run codebase lint:caller-pwd-contract "$target"
   [ "$status" -eq 1 ]
@@ -84,8 +99,11 @@ exec mise run "$@"')
 }
 
 @test "fails when runtime assigns legacy CALLER_PWD" {
-  target=$(make_pkg bad-assign '#!/usr/bin/env bash
-CALLER_PWD="$PWD" exec mise run "$@"')
+  target="$WORK/bad-assign"
+  make_pkg "$target" <<'BASH'
+#!/usr/bin/env bash
+CALLER_PWD="$PWD" exec mise run "$@"
+BASH
 
   run codebase lint:caller-pwd-contract "$target"
   [ "$status" -eq 1 ]
@@ -93,9 +111,12 @@ CALLER_PWD="$PWD" exec mise run "$@"')
 }
 
 @test "allows SHIV_CALLER_PWD inside the shiv package itself" {
-  target=$(make_pkg shiv '#!/usr/bin/env bash
+  target="$WORK/shiv"
+  make_pkg "$target" <<'BASH'
+#!/usr/bin/env bash
 TARGET="${SHIV_CALLER_PWD:-${CALLER_PWD:-.}}"
-printf "%s\n" "$TARGET"')
+printf "%s\n" "$TARGET"
+BASH
 
   run codebase lint:caller-pwd-contract "$target"
   [ "$status" -eq 0 ]
