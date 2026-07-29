@@ -220,6 +220,86 @@ SCRIPT
   [[ "$output" == *"scripts:deploy"* ]]
 }
 
+@test "lint: honors multi-path scope written as a TOML array" {
+  write_config <<'EOF'
+[settings]
+quiet = true
+task_output = "interleave"
+
+[_.codebase]
+lint = ["gum-table"]
+
+[_.codebase.scope]
+gum-table = [".mise/tasks", "scripts"]
+EOF
+
+  write_clean_task
+  mkdir -p "$REPO/scripts"
+  cat > "$REPO/scripts/deploy" <<'SCRIPT'
+#!/usr/bin/env bash
+echo ok
+SCRIPT
+
+  run codebase lint "$REPO"
+  [ "$status" -eq 0 ]
+  # Array brackets, quotes and commas must not leak into the target paths.
+  [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/.mise/tasks"* ]]
+  [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/scripts"* ]]
+  [[ "$output" != *'['* ]]
+  [[ "$output" != *'"'* ]]
+}
+
+@test "lint: does not glob scope values against its own directory" {
+  write_config <<'EOF'
+[settings]
+quiet = true
+task_output = "interleave"
+
+[_.codebase]
+lint = ["gum-table"]
+
+[_.codebase.scope]
+gum-table = "lib/*.sh"
+EOF
+
+  write_clean_task
+  mkdir -p "$REPO/lib"
+  cat > "$REPO/lib/only-mine.sh" <<'SCRIPT'
+#!/usr/bin/env bash
+echo ok
+SCRIPT
+
+  run codebase lint "$REPO"
+  # The pattern stays literal and fails loudly against the target repo.
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/lib/*.sh"* ]]
+  # codebase's own lib/ must never be pulled into another repo's scope.
+  [[ "$output" != *"codebase-config.sh"* ]]
+  [[ "$output" != *"shell-files.sh"* ]]
+}
+
+@test "lint: fails loudly when a scope resolves to no targets" {
+  write_config <<'EOF'
+[settings]
+quiet = true
+task_output = "interleave"
+
+[_.codebase]
+lint = ["gum-table"]
+
+[_.codebase.scope]
+gum-table = "  "
+EOF
+
+  write_clean_task
+
+  run codebase lint "$REPO"
+  # An unlinted rule must not read as a pass.
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"lint:gum-table scope resolved to no targets"* ]]
+  [[ "$output" != *"lint rule(s) passed"* ]]
+}
+
 @test "lint: parses multiline lint arrays" {
   write_config <<'EOF'
 [settings]
