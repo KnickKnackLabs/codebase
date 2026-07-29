@@ -134,7 +134,7 @@ EOF
   [ "$status" -ne 0 ]
   [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/scripts"* ]]
   [[ "$output" == *"WARN"*"scripts:table"* ]]
-  [[ "$output" == *"codebase: 1 lint rule(s) failed"* ]]
+  [[ "$output" == *"codebase: 1 lint check(s) failed"* ]]
 }
 
 @test "lint: summarizes multiple failing rules" {
@@ -154,7 +154,7 @@ EOF
   [ "$status" -ne 0 ]
   [[ "$output" == *"FAIL"*"repo: missing task_output"* ]]
   [[ "$output" == *"WARN"*"scripts:table"* ]]
-  [[ "$output" == *"codebase: 2 lint rule(s) failed"* ]]
+  [[ "$output" == *"codebase: 2 lint check(s) failed"* ]]
   [[ "$output" == *"lint:mise-settings"* ]]
   [[ "$output" == *"lint:gum-table"* ]]
 }

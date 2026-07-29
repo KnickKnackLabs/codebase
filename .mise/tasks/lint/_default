@@ -75,7 +75,9 @@ done
 
 if [[ "$failures" -gt 0 ]]; then
   echo "" >&2
-  echo "codebase: $failures lint rule(s) failed" >&2
+  # Counts failing rule/target pairs, not rules: one rule with a two-path
+  # scope can contribute two failures.
+  echo "codebase: $failures lint check(s) failed" >&2
   for failed in "${FAILED[@]}"; do
     echo "  - $failed" >&2
   done
