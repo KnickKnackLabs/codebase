@@ -195,7 +195,6 @@ lint = ["gum-table"]
 gum-table = ".mise/tasks scripts"
 EOF
 
-  # Create a dirty file in .mise/tasks/ (printf inside loop = WARN)
   write_clean_task
   cat > "$REPO/.mise/tasks/build" <<'SCRIPT'
 #!/usr/bin/env bash
@@ -204,7 +203,6 @@ while read -r item; do
 done < input
 SCRIPT
 
-  # Create a dirty file in scripts/ (printf padding = INFO, not a WARN)
   mkdir -p "$REPO/scripts"
   cat > "$REPO/scripts/deploy" <<'SCRIPT'
 #!/usr/bin/env bash
@@ -212,7 +210,6 @@ printf "%-20s %s\n" "$1" "$2"
 SCRIPT
 
   run codebase lint "$REPO"
-  # gum-table fails on .mise/tasks/build (loop-table WARN)
   [ "$status" -ne 0 ]
   [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/.mise/tasks"* ]]
   [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/scripts"* ]]
@@ -242,7 +239,6 @@ SCRIPT
 
   run codebase lint "$REPO"
   [ "$status" -eq 0 ]
-  # Array brackets, quotes and commas must not leak into the target paths.
   [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/.mise/tasks"* ]]
   [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/scripts"* ]]
   [[ "$output" != *'['* ]]
@@ -270,10 +266,8 @@ echo ok
 SCRIPT
 
   run codebase lint "$REPO"
-  # The pattern stays literal and fails loudly against the target repo.
   [ "$status" -ne 0 ]
   [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/lib/*.sh"* ]]
-  # codebase's own lib/ must never be pulled into another repo's scope.
   [[ "$output" != *"codebase-config.sh"* ]]
   [[ "$output" != *"shell-files.sh"* ]]
 }
@@ -294,7 +288,6 @@ EOF
   write_clean_task
 
   run codebase lint "$REPO"
-  # An unlinted rule must not read as a pass.
   [ "$status" -ne 0 ]
   [[ "$output" == *"lint:gum-table scope resolved to no targets"* ]]
   [[ "$output" != *"lint rule(s) passed"* ]]

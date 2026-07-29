@@ -132,13 +132,8 @@ codebase_scope_for_rule() {
 
 # codebase_targets_for_rule <repo-root> <rule>
 #
-# Emit the concrete target path(s) for a rule after scope resolution, one
-# line per target. A multi-path scope may be written either way:
-#
-#   or-true = ".mise/tasks lib"        # space-separated string
-#   or-true = [".mise/tasks", "lib"]   # TOML array
-#
-# Emits nothing when the scope resolves to no paths; the caller reports it.
+# Emit one target path per line after scope resolution. A scope may hold several
+# paths, space-separated or as a TOML array, or none at all.
 codebase_targets_for_rule() {
   local repo_root="$1"
   local rule="$2"
@@ -147,21 +142,12 @@ codebase_targets_for_rule() {
 
   scope=$(codebase_scope_for_rule "$repo_root" "$rule")
 
-  # Normalize TOML array syntax (gum-table = [".mise/tasks", "lib"]) into a
-  # plain space-separated list, mirroring the awk in
-  # codebase_configured_lint_rules so both keys accept both spellings.
+  # Normalize TOML array punctuation, as codebase_configured_lint_rules does.
   scope="${scope//[\[\],\"]/ }"
 
-  # Split on spaces only. An unquoted $scope would also glob, and the glob
-  # would resolve against this tool's working directory rather than the
-  # target repo — a "lib/*.sh" scope would lint codebase's own lib/ and
-  # never see the target's. Same splitting the lint rules use on their own
-  # target lists (see .mise/tasks/lint/gum-table).
+  # Split on spaces only; an unquoted expansion would also glob, against codebase's own directory.
   IFS=' ' read -ra tokens <<< "$scope"
 
-  # An empty or whitespace-only scope yields no targets at all. Emit nothing
-  # and let the caller report it; silently substituting the repo root would
-  # widen a misconfigured scope to the whole tree.
   if [[ ${#tokens[@]} -eq 0 ]]; then
     return 0
   fi

@@ -36,15 +36,12 @@ failures=0
 FAILED=()
 
 for rule in "${RULES[@]}"; do
-  # Collect all targets for this rule (supports multi-path scopes)
   TARGETS=()
   while IFS= read -r t; do
     [[ -n "$t" ]] && TARGETS+=("$t")
   done < <(codebase_targets_for_rule "$REPO_ROOT" "$rule")
 
-  # An empty scope resolves to no targets. Report it rather than skipping the
-  # rule: a silently unlinted rule reads as a pass, which is the false
-  # confidence this scope handling exists to avoid.
+  # A skipped rule would read as a pass, so an empty scope is a failure.
   if [[ ${#TARGETS[@]} -eq 0 ]]; then
     echo "ERROR: lint:$rule scope resolved to no targets" >&2
     failures=$((failures + 1))
@@ -75,8 +72,6 @@ done
 
 if [[ "$failures" -gt 0 ]]; then
   echo "" >&2
-  # Counts failing rule/target pairs, not rules: one rule with a two-path
-  # scope can contribute two failures.
   echo "codebase: $failures lint check(s) failed" >&2
   for failed in "${FAILED[@]}"; do
     echo "  - $failed" >&2
