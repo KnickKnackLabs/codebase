@@ -132,25 +132,43 @@ codebase_scope_for_rule() {
 
 # codebase_targets_for_rule <repo-root> <rule>
 #
-# Emit the concrete target path(s) for a rule after scope resolution.
-# When the scope value is a space-separated list of paths (from TOML string
-# values like or-true = ".mise/tasks lib"), emits one line per target.
+# Emit the concrete target path(s) for a rule after scope resolution, one
+# line per target. A multi-path scope may be written either way:
+#
+#   or-true = ".mise/tasks lib"        # space-separated string
+#   or-true = [".mise/tasks", "lib"]   # TOML array
+#
+# Emits nothing when the scope resolves to no paths; the caller reports it.
 codebase_targets_for_rule() {
   local repo_root="$1"
   local rule="$2"
   local scope token
+  local -a tokens
 
   scope=$(codebase_scope_for_rule "$repo_root" "$rule")
 
-  # Handle empty/dot scope — single target: the repo root itself.
-  case "$scope" in
-    ""|".") printf '%s\n' "$repo_root"; return 0 ;;
-  esac
+  # Normalize TOML array syntax (gum-table = [".mise/tasks", "lib"]) into a
+  # plain space-separated list, mirroring the awk in
+  # codebase_configured_lint_rules so both keys accept both spellings.
+  scope="${scope//[\[\],\"]/ }"
 
-  # Split scope on whitespace into individual path tokens and resolve each.
-  # This supports multi-path scopes like ".mise/tasks lib" from TOML.
-  for token in $scope; do
+  # Split on spaces only. An unquoted $scope would also glob, and the glob
+  # would resolve against this tool's working directory rather than the
+  # target repo — a "lib/*.sh" scope would lint codebase's own lib/ and
+  # never see the target's. Same splitting the lint rules use on their own
+  # target lists (see .mise/tasks/lint/gum-table).
+  IFS=' ' read -ra tokens <<< "$scope"
+
+  # An empty or whitespace-only scope yields no targets at all. Emit nothing
+  # and let the caller report it; silently substituting the repo root would
+  # widen a misconfigured scope to the whole tree.
+  if [[ ${#tokens[@]} -eq 0 ]]; then
+    return 0
+  fi
+
+  for token in "${tokens[@]}"; do
     case "$token" in
+      .) printf '%s\n' "$repo_root" ;;
       /*) printf '%s\n' "$token" ;;
       *) printf '%s/%s\n' "$repo_root" "$token" ;;
     esac
