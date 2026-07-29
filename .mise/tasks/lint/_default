@@ -42,6 +42,16 @@ for rule in "${RULES[@]}"; do
     [[ -n "$t" ]] && TARGETS+=("$t")
   done < <(codebase_targets_for_rule "$REPO_ROOT" "$rule")
 
+  # An empty scope resolves to no targets. Report it rather than skipping the
+  # rule: a silently unlinted rule reads as a pass, which is the false
+  # confidence this scope handling exists to avoid.
+  if [[ ${#TARGETS[@]} -eq 0 ]]; then
+    echo "ERROR: lint:$rule scope resolved to no targets" >&2
+    failures=$((failures + 1))
+    FAILED+=("lint:$rule scope resolved to no targets")
+    continue
+  fi
+
   for rule_target in "${TARGETS[@]}"; do
     echo "codebase: lint:$rule $rule_target"
 
