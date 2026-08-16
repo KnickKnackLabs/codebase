@@ -60,6 +60,8 @@ bash_nounset_safe_alternate_value() {
 bash_nounset_scan_line() {
   local rule="$1"
   local line="$2"
+  local candidate_limit="${3:-0}"
+  local candidate_count=0
   local pattern remaining match prefix suffix
 
   # AST matching chooses executable candidate lines. Remove co-located simple
@@ -87,6 +89,11 @@ bash_nounset_scan_line() {
     match="${BASH_REMATCH[0]}"
     prefix="${remaining%%"$match"*}"
     suffix="${remaining#*"$match"}"
+    candidate_count=$((candidate_count + 1))
+
+    if [[ "$candidate_limit" -gt 0 && "$candidate_count" -gt "$candidate_limit" ]]; then
+      break
+    fi
 
     if ! bash_nounset_safe_alternate_value "$rule" "$match" "$prefix" "$suffix"; then
       printf '%s\n' "$match"
@@ -100,7 +107,7 @@ bash_nounset_scan_file() {
   local rule="$1"
   local file="$2"
   local rule_file="$_CODEBASE_BASH_NOUNSET_RULE_DIR/$rule.yml"
-  local ast_output zero_based lineno line trimmed match
+  local ast_output zero_based candidate_count lineno line trimmed match
 
   if [[ ! -f "$rule_file" ]]; then
     echo "ERROR: missing ast-grep rule: $rule_file" >&2
@@ -117,7 +124,7 @@ bash_nounset_scan_file() {
     return 1
   fi
 
-  while IFS= read -r zero_based; do
+  while read -r zero_based candidate_count; do
     [[ -n "$zero_based" ]] || continue
     lineno=$((zero_based + 1))
     line=$(sed -n "${lineno}p" "$file")
@@ -128,11 +135,15 @@ bash_nounset_scan_file() {
     while IFS= read -r match; do
       [[ -n "$match" ]] || continue
       printf '%s: %s\n' "$lineno" "$trimmed"
-    done < <(bash_nounset_scan_line "$rule" "$line")
+    done < <(bash_nounset_scan_line "$rule" "$line" "$candidate_count")
   done < <(
     printf '%s\n' "$ast_output" |
       sed -nE 's/.*"start":\{"line":([0-9]+),.*/\1/p' |
-      awk '!seen[$0]++'
+      awk '
+        !seen[$0]++ { order[++lines] = $0 }
+        { count[$0]++ }
+        END { for (i = 1; i <= lines; i++) print order[i], count[order[i]] }
+      '
   )
 }
 
