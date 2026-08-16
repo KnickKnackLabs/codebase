@@ -14,12 +14,17 @@ write_config() {
   cat > "$REPO/mise.toml"
 }
 
-write_clean_task() {
-  mkdir -p "$REPO/.mise/tasks"
-  cat > "$REPO/.mise/tasks/clean" <<'EOF'
+write_clean_script() {
+  local dir="$1"
+  mkdir -p "$REPO/$dir"
+  cat > "$REPO/$dir/clean" <<'EOF'
 #!/usr/bin/env bash
 echo ok
 EOF
+}
+
+write_clean_task() {
+  write_clean_script .mise/tasks
 }
 
 write_bad_table_script() {
@@ -134,7 +139,7 @@ EOF
   [ "$status" -ne 0 ]
   [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/scripts"* ]]
   [[ "$output" == *"WARN"*"scripts:table"* ]]
-  [[ "$output" == *"codebase: 1 lint check(s) failed"* ]]
+  [[ "$output" == *"codebase: 1 lint rule(s) failed"* ]]
 }
 
 @test "lint: summarizes multiple failing rules" {
@@ -154,7 +159,7 @@ EOF
   [ "$status" -ne 0 ]
   [[ "$output" == *"FAIL"*"repo: missing task_output"* ]]
   [[ "$output" == *"WARN"*"scripts:table"* ]]
-  [[ "$output" == *"codebase: 2 lint check(s) failed"* ]]
+  [[ "$output" == *"codebase: 2 lint rule(s) failed"* ]]
   [[ "$output" == *"lint:mise-settings"* ]]
   [[ "$output" == *"lint:gum-table"* ]]
 }
@@ -195,26 +200,14 @@ lint = ["gum-table"]
 gum-table = ".mise/tasks scripts"
 EOF
 
-  write_clean_task
-  cat > "$REPO/.mise/tasks/build" <<'SCRIPT'
-#!/usr/bin/env bash
-while read -r item; do
-  printf "%-10s %s\n" "$item" ok
-done < input
-SCRIPT
-
-  mkdir -p "$REPO/scripts"
-  cat > "$REPO/scripts/deploy" <<'SCRIPT'
-#!/usr/bin/env bash
-printf "%-20s %s\n" "$1" "$2"
-SCRIPT
+  write_bad_table_script .mise/tasks
+  write_bad_table_script scripts
 
   run codebase lint "$REPO"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/.mise/tasks"* ]]
-  [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/scripts"* ]]
-  [[ "$output" == *"WARN"*"tasks:build"* ]]
-  [[ "$output" == *"scripts:deploy"* ]]
+  [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/.mise/tasks $REPO_ROOT/scripts"* ]]
+  [[ "$output" == *"WARN"*"tasks:table"* ]]
+  [[ "$output" == *"scripts:table"* ]]
 }
 
 @test "lint: honors multi-path scope written as a TOML array" {
@@ -231,16 +224,12 @@ gum-table = [".mise/tasks", "scripts"]
 EOF
 
   write_clean_task
-  mkdir -p "$REPO/scripts"
-  cat > "$REPO/scripts/deploy" <<'SCRIPT'
-#!/usr/bin/env bash
-echo ok
-SCRIPT
+  write_clean_script scripts
 
   run codebase lint "$REPO"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/.mise/tasks"* ]]
-  [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/scripts"* ]]
+  [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/.mise/tasks $REPO_ROOT/scripts"* ]]
+  [ "$(printf '%s\n' "$output" | grep -c 'OK    no manual table formatting found')" -eq 1 ]
   [[ "$output" != *'['* ]]
   [[ "$output" != *'"'* ]]
 }
@@ -259,11 +248,7 @@ gum-table = "lib/*.sh"
 EOF
 
   write_clean_task
-  mkdir -p "$REPO/lib"
-  cat > "$REPO/lib/only-mine.sh" <<'SCRIPT'
-#!/usr/bin/env bash
-echo ok
-SCRIPT
+  write_clean_script lib
 
   run codebase lint "$REPO"
   [ "$status" -ne 0 ]
@@ -272,8 +257,11 @@ SCRIPT
   [[ "$output" != *"shell-files.sh"* ]]
 }
 
-@test "lint: fails loudly when a scope resolves to no targets" {
-  write_config <<'EOF'
+@test "lint: rejects empty scope values" {
+  write_clean_task
+
+  for scope in '""' '"  "' '[]'; do
+    cat > "$REPO/mise.toml" <<EOF
 [settings]
 quiet = true
 task_output = "interleave"
@@ -282,15 +270,14 @@ task_output = "interleave"
 lint = ["gum-table"]
 
 [_.codebase.scope]
-gum-table = "  "
+gum-table = $scope
 EOF
 
-  write_clean_task
-
-  run codebase lint "$REPO"
-  [ "$status" -ne 0 ]
-  [[ "$output" == *"lint:gum-table scope resolved to no targets"* ]]
-  [[ "$output" != *"lint rule(s) passed"* ]]
+    run codebase lint "$REPO"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"lint:gum-table scope resolved to no targets"* ]]
+    [[ "$output" != *"lint rule(s) passed"* ]]
+  done
 }
 
 @test "lint: parses multiline lint arrays" {

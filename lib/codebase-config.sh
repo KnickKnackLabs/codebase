@@ -121,10 +121,8 @@ codebase_scope_for_rule() {
   local value
 
   if [[ -f "$toml" ]] && value=$(mise config get -f "$toml" "_.codebase.scope.$rule" 2>/dev/null); then
-    if [[ -n "$value" ]]; then
-      printf '%s\n' "$value"
-      return 0
-    fi
+    printf '%s\n' "$value"
+    return 0
   fi
 
   codebase_default_scope_for_rule "$rule"
@@ -132,31 +130,22 @@ codebase_scope_for_rule() {
 
 # codebase_targets_for_rule <repo-root> <rule>
 #
-# Emit one target path per line after scope resolution. A scope may hold several
-# paths, space-separated or as a TOML array, or none at all.
+# Emit concrete target paths after scope resolution, one per line.
 codebase_targets_for_rule() {
   local repo_root="$1"
   local rule="$2"
   local scope token
-  local -a tokens
 
   scope=$(codebase_scope_for_rule "$repo_root" "$rule")
 
-  # Normalize TOML array punctuation, as codebase_configured_lint_rules does.
-  scope="${scope//[\[\],\"]/ }"
-
-  # Split on spaces only; an unquoted expansion would also glob, against codebase's own directory.
-  IFS=' ' read -ra tokens <<< "$scope"
-
-  if [[ ${#tokens[@]} -eq 0 ]]; then
-    return 0
-  fi
-
-  for token in "${tokens[@]}"; do
+  while IFS= read -r token; do
     case "$token" in
       .) printf '%s\n' "$repo_root" ;;
       /*) printf '%s\n' "$token" ;;
       *) printf '%s/%s\n' "$repo_root" "$token" ;;
     esac
-  done
+  done < <(printf '%s\n' "$scope" | awk '{
+    gsub(/[\[\]",]/, " ")
+    for (i = 1; i <= NF; i++) print $i
+  }')
 }
