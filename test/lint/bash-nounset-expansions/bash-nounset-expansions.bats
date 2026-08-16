@@ -132,6 +132,19 @@ BASH
   [ "$status" -eq 0 ]
 }
 
+@test "array: does not count comment examples beside executable candidates" {
+  write_task wrapper <<'BASH'
+#!/usr/bin/env bash
+set -u
+child "${real[@]}" # documentation: child "${example[@]}"
+BASH
+
+  run codebase lint:bash-empty-array-expansions "$FIXTURE"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'FAIL  repo: 1 empty-array expansion'* ]]
+}
+
 @test "array: accepts guarded at-sign and star forms" {
   write_task wrapper <<'BASH'
 #!/usr/bin/env bash
