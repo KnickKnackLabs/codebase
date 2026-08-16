@@ -30,6 +30,19 @@ BASH
   [[ "$output" == *'Use "$@" instead of "${@}"'* ]]
 }
 
+@test "argv: flags unquoted braced positional expansion under nounset" {
+  write_task wrapper <<'BASH'
+#!/usr/bin/env bash
+set -u
+exec child ${@}
+BASH
+
+  run codebase lint:bash-empty-argv-forwarding "$FIXTURE"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'exec child ${@}'* ]]
+}
+
 @test "argv: accepts the unbraced positional form that is safe on Bash 3.2" {
   write_task wrapper <<'BASH'
 #!/usr/bin/env bash
@@ -291,6 +304,9 @@ BASH
   [ "$status" -eq 0 ]
 
   run -127 /bin/bash -uc 'set --; printf x "${@}"'
+  [ "$status" -eq 127 ]
+
+  run -127 /bin/bash -uc 'set --; printf x ${@}'
   [ "$status" -eq 127 ]
 
   run -127 /bin/bash -uc 'args=(); printf x "${args[@]}"'

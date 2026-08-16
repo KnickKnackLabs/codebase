@@ -41,12 +41,8 @@ bash_nounset_safe_alternate_value() {
 
   case "$rule" in
     bash-empty-argv-forwarding)
-      # The argv match includes its surrounding quotes, so the outer guarded
-      # expansion ends immediately before and after the matched text.
       # shellcheck disable=SC2016 # Match a literal parameter expansion.
-      safe_prefix='${@+'
-      [[ "$prefix" == *"$safe_prefix" && "$suffix" == '}'* ]]
-      return
+      safe_prefix='${@+"'
       ;;
     bash-empty-array-expansions)
       parameter="${match#\$\{}"
@@ -72,9 +68,9 @@ bash_nounset_scan_line() {
 
   case "$rule" in
     bash-empty-argv-forwarding)
-      # macOS Bash 3.2 accepts "$@" under nounset. The braced "${@}" form is
-      # the incompatible one, so do not teach callers to rewrite safe code.
-      pattern='"\$\{@\}"'
+      # macOS Bash 3.2 accepts $@ and "$@" under nounset. Bracing the special
+      # parameter as ${@} fails whether quoted or unquoted.
+      pattern='\$\{@\}'
       ;;
     bash-empty-array-expansions)
       # Empty named arrays fail under Bash 3.2 in every expansion context,

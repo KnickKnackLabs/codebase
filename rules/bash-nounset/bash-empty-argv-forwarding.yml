@@ -1,11 +1,8 @@
 id: bash-empty-argv-forwarding-candidate
 language: Bash
 severity: hint
-message: braced positional expansion inside a quoted string
+message: braced positional expansion
 rule:
   all:
     - kind: expansion
     - regex: '^\$\{@\}$'
-    - inside:
-        kind: string
-        stopBy: end
