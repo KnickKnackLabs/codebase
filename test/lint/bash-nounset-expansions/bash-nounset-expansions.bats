@@ -309,6 +309,25 @@ BASH
   [ "$status" -eq 2 ]
 }
 
+@test "more than 255 dirty targets cannot wrap the exit status to success" {
+  local -a targets
+  local i
+  targets=()
+  write_task wrapper <<'BASH'
+#!/usr/bin/env bash
+set -u
+child "${args[@]}"
+BASH
+  for i in $(seq 1 256); do
+    targets+=("$FIXTURE")
+  done
+
+  run codebase lint:bash-empty-array-expansions "${targets[@]}"
+
+  [ "$status" -eq 255 ]
+  [ "$(printf '%s\n' "$output" | grep -c '^FAIL  repo:')" -eq 256 ]
+}
+
 @test "guarded and unsafe expansions on one line are classified independently" {
   write_task wrapper <<'BASH'
 #!/usr/bin/env bash

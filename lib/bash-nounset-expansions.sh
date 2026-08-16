@@ -261,5 +261,6 @@ bash_nounset_lint() {
     fi
   done
 
+  [[ "$failures" -le 255 ]] || failures=255
   return "$failures"
 }
