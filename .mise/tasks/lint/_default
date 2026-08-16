@@ -41,7 +41,6 @@ for rule in "${RULES[@]}"; do
     [[ -n "$t" ]] && TARGETS+=("$t")
   done < <(codebase_targets_for_rule "$REPO_ROOT" "$rule")
 
-  # A skipped rule would read as a pass, so an empty scope is a failure.
   if [[ ${#TARGETS[@]} -eq 0 ]]; then
     echo "ERROR: lint:$rule scope resolved to no targets" >&2
     failures=$((failures + 1))
@@ -49,30 +48,30 @@ for rule in "${RULES[@]}"; do
     continue
   fi
 
-  for rule_target in "${TARGETS[@]}"; do
-    echo "codebase: lint:$rule $rule_target"
+  printf 'codebase: lint:%s' "$rule"
+  printf ' %s' "${TARGETS[@]}"
+  printf '\n'
 
-    output=""
-    if output=$(mise run -q "lint:$rule" "$rule_target" 2>&1); then
-      status=0
-    else
-      status=$?
-    fi
+  output=""
+  if output=$(mise run -q "lint:$rule" "${TARGETS[@]}" 2>&1); then
+    status=0
+  else
+    status=$?
+  fi
 
-    if [[ -n "$output" ]]; then
-      printf '%s\n' "$output"
-    fi
+  if [[ -n "$output" ]]; then
+    printf '%s\n' "$output"
+  fi
 
-    if [[ "$status" -ne 0 ]]; then
-      failures=$((failures + 1))
-      FAILED+=("lint:$rule ($rule_target) exited $status")
-    fi
-  done
+  if [[ "$status" -ne 0 ]]; then
+    failures=$((failures + 1))
+    FAILED+=("lint:$rule (${TARGETS[*]}) exited $status")
+  fi
 done
 
 if [[ "$failures" -gt 0 ]]; then
   echo "" >&2
-  echo "codebase: $failures lint check(s) failed" >&2
+  echo "codebase: $failures lint rule(s) failed" >&2
   for failed in "${FAILED[@]}"; do
     echo "  - $failed" >&2
   done
