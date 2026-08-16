@@ -188,6 +188,20 @@ BASH
   [ "$status" -eq 1 ]
 }
 
+@test "nounset gating recognizes separated set options" {
+  write_task wrapper <<'BASH'
+#!/usr/bin/env bash
+set -e -u -o pipefail
+child "${@}" "${args[@]}"
+BASH
+
+  run codebase lint:bash-empty-argv-forwarding "$FIXTURE"
+  [ "$status" -eq 1 ]
+
+  run codebase lint:bash-empty-array-expansions "$FIXTURE"
+  [ "$status" -eq 1 ]
+}
+
 @test "inline ignores must name the rule and explain the exception" {
   write_task wrapper <<'BASH'
 #!/usr/bin/env bash

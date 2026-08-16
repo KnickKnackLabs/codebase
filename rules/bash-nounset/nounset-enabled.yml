@@ -5,4 +5,4 @@ message: command enables nounset
 rule:
   all:
     - kind: command
-    - regex: '^set[[:space:]]+(-[A-Za-z]*u[A-Za-z]*([[:space:]]|$)|-o[[:space:]]+nounset([[:space:]]|$))'
+    - regex: '^set([[:space:]]+[^[:space:]]+)*[[:space:]]+(-[A-Za-z]*u[A-Za-z]*|-o[[:space:]]+nounset)([[:space:]]|$)'
