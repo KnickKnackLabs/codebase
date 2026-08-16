@@ -37,24 +37,27 @@ bash_nounset_safe_alternate_value() {
   local match="$2"
   local prefix="$3"
   local suffix="$4"
-  local parameter safe_prefix
+  local parameter safe_prefix safe_colon_prefix
 
   case "$rule" in
     bash-empty-argv-forwarding)
       # shellcheck disable=SC2016 # Match a literal parameter expansion.
       safe_prefix='${@+"'
+      # shellcheck disable=SC2016 # Match a literal parameter expansion.
+      safe_colon_prefix='${@:+"'
       ;;
     bash-empty-array-expansions)
       parameter="${match#\$\{}"
       parameter="${parameter%\}}"
       safe_prefix="\${${parameter}+\""
+      safe_colon_prefix="\${${parameter}:+\""
       ;;
     *)
       return 1
       ;;
   esac
 
-  [[ "$prefix" == *"$safe_prefix" && "$suffix" == '"}'* ]]
+  [[ ( "$prefix" == *"$safe_prefix" || "$prefix" == *"$safe_colon_prefix" ) && "$suffix" == '"}'* ]]
 }
 
 bash_nounset_scan_line() {

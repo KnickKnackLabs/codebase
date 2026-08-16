@@ -145,6 +145,22 @@ BASH
   [ "$status" -eq 0 ]
 }
 
+@test "both rules accept colon alternate-value guards" {
+  write_task wrapper <<'BASH'
+#!/usr/bin/env bash
+set -u
+args=()
+child ${@:+"${@}"}
+child ${args[@]:+"${args[@]}"}
+BASH
+
+  run codebase lint:bash-empty-argv-forwarding "$FIXTURE"
+  [ "$status" -eq 0 ]
+
+  run codebase lint:bash-empty-array-expansions "$FIXTURE"
+  [ "$status" -eq 0 ]
+}
+
 @test "both rules ignore hazards in files that do not enable nounset" {
   write_task wrapper <<'BASH'
 #!/usr/bin/env bash
