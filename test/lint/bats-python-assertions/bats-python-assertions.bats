@@ -51,6 +51,7 @@ BATS
   run --separate-stderr python3 -c 'assert value'
   run ! python3 -c 'assert value'
   run -1 python3 -c 'assert value'
+  run -255 python3 -c 'assert value'
   run -- python3 -c 'assert value'
   run -1 --keep-empty-lines --separate-stderr -- python3 -c 'assert value'
 }
@@ -59,7 +60,7 @@ BATS
   run codebase lint:bats-python-assertions "$TARGET"
 
   [ "$status" -eq 1 ]
-  [[ "$output" == *"5 inline Python assertion(s)"* ]]
+  [[ "$output" == *"6 inline Python assertion(s)"* ]]
 }
 
 @test "stops BATS run option recognition at the terminator" {
@@ -68,6 +69,20 @@ BATS
 @test "parse" {
   run -- --separate-stderr python3 -c 'assert value'
   run -- -1 python3 -c 'assert value'
+}
+BATS
+
+  run codebase lint:bats-python-assertions "$TARGET"
+
+  [ "$status" -eq 0 ]
+}
+
+@test "does not flag expected statuses BATS rejects before execution" {
+  write_bats parse <<'BATS'
+#!/usr/bin/env bats
+@test "parse" {
+  run -256 python3 -c 'assert value'
+  run -999 python3 -c 'assert value'
 }
 BATS
 
