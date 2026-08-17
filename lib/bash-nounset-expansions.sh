@@ -188,7 +188,7 @@ bash_nounset_parse_targets() {
 bash_nounset_lint() {
   local rule="$1"
   local encoded_targets="$2"
-  local failures=0 status target name toml file rel hit hit_count target_output scan_output
+  local failures=0 status target name toml file rel hit hit_count target_output scan_output discovered_files
   local subject hint
   local -a targets files
 
@@ -218,10 +218,15 @@ bash_nounset_lint() {
       continue
     fi
 
+    if ! discovered_files=$(discover_shell_files "$target"); then
+      echo "ERROR: could not discover shell files in $target" >&2
+      return 1
+    fi
+
     files=()
     while IFS= read -r file; do
       [[ -n "$file" ]] && files+=("$file")
-    done < <(discover_shell_files "$target")
+    done <<< "$discovered_files"
 
     if [[ ${#files[@]} -eq 0 ]]; then
       echo "OK    $name (no shell files found)"
