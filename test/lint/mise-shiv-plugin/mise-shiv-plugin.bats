@@ -42,6 +42,59 @@ TOML
   [ "$status" -eq 0 ]
 }
 
+@test "enforces backend setup for table-form shiv tool declarations" {
+  write_mise <<'TOML'
+[tools."shiv:codebase"]
+version = "0.4"
+TOML
+
+  run codebase lint:mise-shiv-plugin "$FIXTURE"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"settings.experimental = true"* ]]
+  [[ "$output" == *"plugins.shiv ="* ]]
+}
+
+@test "detects shiv tools in a large tools table under pipefail" {
+  {
+    printf '%s\n' '[tools]' '"shiv:codebase" = "0.4"'
+    local i=1
+    while [[ "$i" -le 12000 ]]; do
+      printf '"tool-%05d" = "1"\n' "$i"
+      i=$((i + 1))
+    done
+  } > "$FIXTURE/mise.toml"
+
+  run codebase lint:mise-shiv-plugin "$FIXTURE"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"settings.experimental = true"* ]]
+  [[ "$output" == *"plugins.shiv ="* ]]
+  [[ "$output" != *"no shiv tools declared"* ]]
+}
+
+@test "accepts canonical plugin URL suffixes and refs" {
+  local source
+
+  for source in \
+    "https://github.com/KnickKnackLabs/vfox-shiv.git" \
+    "https://github.com/KnickKnackLabs/vfox-shiv#main" \
+    "https://github.com/KnickKnackLabs/vfox-shiv.git#main"; do
+    write_mise <<TOML
+[settings]
+experimental = true
+[plugins]
+shiv = "$source"
+[tools]
+"shiv:codebase" = "0.4"
+TOML
+
+    run codebase lint:mise-shiv-plugin "$FIXTURE"
+
+    [ "$status" -eq 0 ]
+  done
+}
+
 @test "passes without enforcing backend setup when no shiv tools are declared" {
   write_mise <<'TOML'
 [tools]
