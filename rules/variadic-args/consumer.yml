@@ -12,10 +12,6 @@ rule:
             stopBy: neighbor
     - all:
         - kind: command
-        - not:
-            inside:
-              kind: redirected_statement
-              stopBy: end
         - has:
             kind: command_name
             regex: '^read$'
@@ -23,6 +19,17 @@ rule:
     - all:
         - kind: redirected_statement
         - has:
-            kind: command_name
-            regex: '^read$'
+            all:
+              - kind: command
+              - has:
+                  kind: command_name
+                  regex: '^read$'
+                  stopBy: neighbor
+            stopBy: neighbor
+        - has:
+            any:
+              - kind: heredoc_body
+              - all:
+                  - kind: file_redirect
+                  - regex: '^<[[:space:]]*<[[:space:]]*[(]'
             stopBy: end
