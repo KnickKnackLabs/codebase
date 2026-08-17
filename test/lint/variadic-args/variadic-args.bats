@@ -74,28 +74,35 @@ BASH
   [[ "$output" == *".mise/tasks/search:3: read \\"* ]]
 }
 
-@test "recognizes ANSI-C-quoted read array options" {
+@test "recognizes ANSI-C-quoted read array options and fragments" {
   write_task search <<'BASH'
 #!/usr/bin/env bash
 #USAGE arg "[args]" var=#true
 read $'-a' ARGS <<< "$usage_args"
 read $'\x2d\x61' MORE <<< "$usage_args"
+read -$'a' FRAGMENTS <<< "$usage_args"
+read $'-'$'a' SPLIT <<< "$usage_args"
+read -a "$array_name" <<< "$usage_args"
 BASH
 
   run codebase lint:variadic-args "$TARGET"
 
   [ "$status" -eq 1 ]
-  [[ "$output" == *"2 unsafe variadic Usage consumer"* ]]
+  [[ "$output" == *"5 unsafe variadic Usage consumer"* ]]
   [[ "$output" == *"WARN: read -a loses Mise's quoting"* ]]
 }
 
-@test "does not normalize quoted read words into array options" {
+@test "does not normalize literal or invalid read words into array options" {
   write_task search <<'BASH'
 #!/usr/bin/env bash
 #USAGE arg "[args]" var=#true
 read '-\
 a' VALUE <<< "$usage_args"
 read $'-a\n' VALUE <<< "$usage_args"
+read -a$'\n' VALUE <<< "$usage_args"
+read $'-a\cA' VALUE <<< "$usage_args"
+read "$'-a'" VALUE <<< "$usage_args"
+read \$'-a' VALUE <<< "$usage_args"
 BASH
 
   run codebase lint:variadic-args "$TARGET"

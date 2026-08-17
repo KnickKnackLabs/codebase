@@ -68,23 +68,26 @@ variadic_args_command_uses_var() {
 
 variadic_args_command_words() {
   local command="$1"
-  local transformed="" char pair raw decoded
+  local transformed="" char pair raw decoded ansi_control
   local index=0 length
 
   length="${#command}"
 
-  # xargs handles ordinary shell quotes but not Bash's $'...' form. Decode an
-  # ANSI-C quote only when it spells a possible option; otherwise retain just
-  # its word boundary.
+  # xargs handles ordinary shell quotes but not Bash's $'...' form. Decode
+  # ANSI-C fragments only in unquoted shell context, retaining concatenation
+  # with adjacent text. Poison fragments containing non-option characters so
+  # erasing them cannot turn an invalid word into an option.
   while [[ "$index" -lt "$length" ]]; do
     char="${command:$index:1}"
     pair="${command:$index:2}"
     if [[ "$pair" == "\$'" ]]; then
       raw=""
+      ansi_control=false
       index=$((index + 2))
       while [[ "$index" -lt "$length" ]]; do
         char="${command:$index:1}"
         if [[ "$char" == "\\" ]]; then
+          [[ "${command:$((index + 1)):1}" == c ]] && ansi_control=true
           raw+="${command:$index:2}"
           index=$((index + 2))
         elif [[ "$char" == "'" ]]; then
@@ -95,11 +98,13 @@ variadic_args_command_words() {
           index=$((index + 1))
         fi
       done
-      printf -v decoded '%b' "$raw"
-      if [[ "$decoded" =~ ^-[A-Za-z0-9_-]+$ ]]; then
+      if $ansi_control || ! printf -v decoded '%b' "$raw" 2>/dev/null; then
+        decoded="."
+      fi
+      if [[ "$decoded" =~ ^[A-Za-z0-9_-]*$ ]]; then
         transformed+="$decoded"
       else
-        transformed+="''"
+        transformed+="."
       fi
     elif [[ "$char" == "'" ]]; then
       transformed+="'"
@@ -122,7 +127,30 @@ variadic_args_command_words() {
           index=$((index + 1))
         fi
       done
+    elif [[ "$char" == '"' ]]; then
+      transformed+='"'
+      index=$((index + 1))
+      while [[ "$index" -lt "$length" ]]; do
+        char="${command:$index:1}"
+        pair="${command:$index:2}"
+        if [[ "$char" == '"' ]]; then
+          transformed+='"'
+          index=$((index + 1))
+          break
+        elif [[ "$pair" == $'\\\n' ]]; then
+          index=$((index + 2))
+        elif [[ "$char" == "\\" ]]; then
+          transformed+="${command:$index:2}"
+          index=$((index + 2))
+        else
+          transformed+="$char"
+          index=$((index + 1))
+        fi
+      done
     elif [[ "$pair" == $'\\\n' ]]; then
+      index=$((index + 2))
+    elif [[ "$char" == "\\" ]]; then
+      transformed+="${command:$index:2}"
       index=$((index + 2))
     else
       transformed+="$char"
@@ -135,7 +163,7 @@ variadic_args_command_words() {
 
 variadic_args_read_uses_array() {
   local command="$1"
-  local token options option
+  local token options option array_name
   local index option_index
   local -a words
 
@@ -156,7 +184,17 @@ variadic_args_read_uses_array() {
     while [[ "$option_index" -lt "${#options}" ]]; do
       option="${options:$option_index:1}"
       case "$option" in
-        a) return 0 ;;
+        a)
+          array_name="${options:$((option_index + 1))}"
+          if [[ -z "$array_name" ]]; then
+            index=$((index + 1))
+            array_name="${words[$index]:-}"
+          fi
+          if [[ "$array_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ || "$array_name" == *'$'* ]]; then
+            return 0
+          fi
+          return 1
+          ;;
         E|e|r|s) option_index=$((option_index + 1)) ;;
         d|i|n|N|p|t|u)
           if [[ "$option_index" -eq $((${#options} - 1)) ]]; then
