@@ -66,25 +66,41 @@ variadic_args_command_uses_var() {
   [[ "$command" =~ $bare_re ]] || [[ "$command" =~ $brace_re ]]
 }
 
-variadic_args_is_assignment() {
-  local token="$1"
-  local assignment_re='^[A-Za-z_][A-Za-z0-9_]*(\[[^]]+\])?\+?='
-
-  [[ "$token" =~ $assignment_re ]]
-}
-
-variadic_args_command_name() {
+variadic_args_command_words() {
   local command="$1"
-  local token
+  local continuation=$'\\\n'
+  local transformed="" char pair
+  local index=0 length
 
-  while IFS= read -r token; do
-    if ! variadic_args_is_assignment "$token"; then
-      printf '%s\n' "$token"
-      return 0
+  command="${command//$continuation/}"
+  length="${#command}"
+
+  # xargs handles ordinary shell quotes but not Bash's $'...' form. The
+  # values do not matter here, so retain only each ANSI-C quote's word boundary.
+  while [[ "$index" -lt "$length" ]]; do
+    char="${command:$index:1}"
+    pair="${command:$index:2}"
+    if [[ "$pair" == "\$'" ]]; then
+      transformed+="''"
+      index=$((index + 2))
+      while [[ "$index" -lt "$length" ]]; do
+        char="${command:$index:1}"
+        if [[ "$char" == "\\" ]]; then
+          index=$((index + 2))
+        elif [[ "$char" == "'" ]]; then
+          index=$((index + 1))
+          break
+        else
+          index=$((index + 1))
+        fi
+      done
+    else
+      transformed+="$char"
+      index=$((index + 1))
     fi
-  done < <(printf '%s' "$command" | xargs printf '%s\n')
+  done
 
-  return 1
+  printf '%s' "$transformed" | xargs printf '%s\n'
 }
 
 variadic_args_read_uses_array() {
@@ -96,14 +112,10 @@ variadic_args_read_uses_array() {
   words=()
   while IFS= read -r token; do
     words+=("$token")
-  done < <(printf '%s' "$command" | xargs printf '%s\n')
+  done < <(variadic_args_command_words "$command")
 
-  index=0
-  while [[ "$index" -lt "${#words[@]}" ]] && variadic_args_is_assignment "${words[$index]}"; do
-    index=$((index + 1))
-  done
-  [[ "$index" -lt "${#words[@]}" && "${words[$index]}" == read ]] || return 1
-  index=$((index + 1))
+  [[ "${words[0]:-}" == read ]] || return 1
+  index=1
   while [[ "$index" -lt "${#words[@]}" ]]; do
     token="${words[$index]}"
     [[ "$token" == "--" ]] && return 1
@@ -134,15 +146,10 @@ variadic_args_read_uses_array() {
 
 variadic_args_command_kind() {
   local command="$1"
-  local name
 
-  if ! name=$(variadic_args_command_name "$command"); then
-    return 1
-  fi
-
-  if [[ "$name" == eval ]]; then
+  if [[ "$command" =~ ^eval([[:space:]]|$) ]]; then
     printf '%s\n' eval
-  elif [[ "$name" == read ]] && variadic_args_read_uses_array "$command"; then
+  elif variadic_args_read_uses_array "$command"; then
     printf '%s\n' read-array
   else
     return 1
@@ -151,7 +158,7 @@ variadic_args_command_kind() {
 
 variadic_args_scan_file() {
   local file="$1"
-  local ast_output record offsets start end zero_based lineno source_line command kind var
+  local ast_output record end command_start zero_based lineno source_line command kind var
   local -a declared
 
   declared=()
@@ -168,16 +175,17 @@ variadic_args_scan_file() {
 
   while IFS= read -r record; do
     [[ -n "$record" ]] || continue
-    offsets=$(printf '%s\n' "$record" | sed -nE 's/.*"range":\{"byteOffset":\{"start":([0-9]+),"end":([0-9]+)\}.*\},"file":.*/\1 \2/p')
+    end=$(printf '%s\n' "$record" | sed -nE 's/.*"range":\{"byteOffset":\{"start":[0-9]+,"end":([0-9]+)\}.*\},"file":.*/\1/p')
+    # Start at ast-grep's secondary command-name range so assignment values do
+    # not need to be reparsed as shell words.
+    command_start=$(printf '%s\n' "$record" | sed -nE 's/.*"secondary":\[\{"text":"(eval|read)","range":\{"byteOffset":\{"start":([0-9]+),.*/\2/p')
     zero_based=$(printf '%s\n' "$record" | sed -nE 's/.*"range":\{.*"start":\{"line":([0-9]+),"column":[0-9]+\}.*\},"file":.*/\1/p')
-    [[ -n "$offsets" && -n "$zero_based" ]] || {
+    [[ -n "$end" && -n "$command_start" && -n "$zero_based" ]] || {
       printf 'ERROR: could not parse ast-grep match for %s\n' "$file" >&2
       return 2
     }
-    start="${offsets%% *}"
-    end="${offsets#* }"
     lineno=$((zero_based + 1))
-    command=$(dd if="$file" bs=1 skip="$start" count="$((end - start))" 2>/dev/null)
+    command=$(dd if="$file" bs=1 skip="$command_start" count="$((end - command_start))" 2>/dev/null)
 
     if ! kind=$(variadic_args_command_kind "$command"); then
       continue

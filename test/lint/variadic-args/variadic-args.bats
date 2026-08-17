@@ -73,6 +73,26 @@ BASH
   [[ "$output" == *"MODE+=strict IFS=' ' read -ra ARGS"* ]]
 }
 
+@test "preserves primary ranges for quoted multiline assignment-prefixed commands" {
+  write_task search <<'BASH'
+#!/usr/bin/env bash
+#USAGE arg "[args]" var=#true
+DESCRIPTION=('read -ra DECOY' "$usage_args")
+IFS=$'\'' \
+read -d $'\'' -a ARGS <<< "$usage_args"
+MODE=$'eval \' DECOY' \
+eval "$usage_args"
+BASH
+
+  run codebase lint:variadic-args "$TARGET"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"2 unsafe variadic Usage consumer"* ]]
+  [[ "$output" == *".mise/tasks/search:4: IFS="* ]]
+  [[ "$output" == *".mise/tasks/search:6: MODE="* ]]
+  [[ "$output" != *"DESCRIPTION="* ]]
+}
+
 @test "recognizes read -a after an option argument" {
   write_task search <<'BASH'
 #!/usr/bin/env bash
