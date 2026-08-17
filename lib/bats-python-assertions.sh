@@ -37,11 +37,56 @@ bats_python_assertions_ident_char() {
   return 0
 }
 
+# ast-grep ends PROGRAM before an unquoted line continuation even though Bash
+# removes it and joins the following quoted fragment into the same argument.
+bats_python_assertions_extend_continued_fragments() {
+  local program="$1"
+  local suffix="$2"
+  local length cursor quote char closed
+
+  while [[ "${suffix:0:2}" == $'\\\n' ]]; do
+    length=${#suffix}
+    cursor=0
+    while [[ "${suffix:$cursor:2}" == $'\\\n' ]]; do
+      cursor=$((cursor + 2))
+    done
+    quote="${suffix:$cursor:1}"
+    [[ "$quote" == "'" || "$quote" == '"' ]] || break
+    cursor=$((cursor + 1))
+    closed=false
+
+    while [[ "$cursor" -lt "$length" ]]; do
+      char="${suffix:$cursor:1}"
+      if [[ "$char" == "$quote" ]]; then
+        cursor=$((cursor + 1))
+        closed=true
+        break
+      fi
+      if [[ "$quote" == '"' && "$char" == "\\" ]]; then
+        cursor=$((cursor + 2))
+      else
+        cursor=$((cursor + 1))
+      fi
+    done
+
+    $closed || break
+    program+="${suffix:0:$cursor}"
+    suffix="${suffix:$cursor}"
+  done
+
+  _CODEBASE_BATS_PYTHON_EXTENDED_PROGRAM="$program"
+}
+
 bats_python_assertions_decode_concatenated_word() {
   local word="$1"
   local length=${#1} i=0 char next quote quote_count=0 decoded=""
 
   while [[ "$i" -lt "$length" ]]; do
+    if [[ "${word:$i:2}" == $'\\\n' ]]; then
+      i=$((i + 2))
+      continue
+    fi
+
     quote="${word:$i:1}"
     [[ "$quote" == "'" || "$quote" == '"' ]] || return 1
     quote_count=$((quote_count + 1))
@@ -280,7 +325,7 @@ bats_python_assertions_program_offsets() {
 
 bats_python_assertions_scan_file() {
   local file="$1"
-  local ast_output record offsets program_offsets start end zero_based lineno command program source_line
+  local ast_output record offsets program_offsets start end command_end zero_based lineno command program source_line suffix
 
   if ! ast_output=$(ast-grep scan --stdin --rule "$_CODEBASE_BATS_PYTHON_RULE" --json=stream < "$file" 2>&1); then
     printf 'ERROR: ast-grep could not scan %s\n' "$file" >&2
@@ -305,6 +350,7 @@ bats_python_assertions_scan_file() {
     source_line=$(sed -n "${lineno}p" "$file")
     start="${offsets%% *}"
     end="${offsets#* }"
+    command_end="$end"
     command=$(dd if="$file" bs=1 skip="$start" count="$((end - start))" 2>/dev/null)
     if bats_python_assertions_has_reasoned_ignore "$command" \
       || bats_python_assertions_has_reasoned_ignore "$source_line"; then
@@ -314,6 +360,9 @@ bats_python_assertions_scan_file() {
     start="${program_offsets%% *}"
     end="${program_offsets#* }"
     program=$(dd if="$file" bs=1 skip="$start" count="$((end - start))" 2>/dev/null)
+    suffix=$(dd if="$file" bs=1 skip="$end" count="$((command_end - end))" 2>/dev/null)
+    bats_python_assertions_extend_continued_fragments "$program" "$suffix"
+    program="$_CODEBASE_BATS_PYTHON_EXTENDED_PROGRAM"
     bats_python_assertions_program_has_assert "$program" || continue
 
     printf '%s|%s\n' "$lineno" "${source_line#"${source_line%%[![:space:]]*}"}"
