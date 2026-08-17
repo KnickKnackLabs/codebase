@@ -74,6 +74,34 @@ BASH
   [[ "$output" == *".mise/tasks/search:3: read \\"* ]]
 }
 
+@test "recognizes ANSI-C-quoted read array options" {
+  write_task search <<'BASH'
+#!/usr/bin/env bash
+#USAGE arg "[args]" var=#true
+read $'-a' ARGS <<< "$usage_args"
+read $'\x2d\x61' MORE <<< "$usage_args"
+BASH
+
+  run codebase lint:variadic-args "$TARGET"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"2 unsafe variadic Usage consumer"* ]]
+  [[ "$output" == *"WARN: read -a loses Mise's quoting"* ]]
+}
+
+@test "does not normalize a continuation inside a single-quoted read word" {
+  write_task search <<'BASH'
+#!/usr/bin/env bash
+#USAGE arg "[args]" var=#true
+read '-\
+a' VALUE <<< "$usage_args"
+BASH
+
+  run codebase lint:variadic-args "$TARGET"
+
+  [ "$status" -eq 0 ]
+}
+
 @test "recognizes assignment-prefixed commands without matching assignment values" {
   write_task search <<'BASH'
 #!/usr/bin/env bash

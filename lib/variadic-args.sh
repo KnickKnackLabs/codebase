@@ -68,32 +68,62 @@ variadic_args_command_uses_var() {
 
 variadic_args_command_words() {
   local command="$1"
-  local transformed="" char pair
+  local transformed="" char pair raw decoded
   local index=0 length
 
   length="${#command}"
 
-  # xargs handles ordinary shell quotes but not Bash's $'...' form. The
-  # values do not matter here, so retain only each ANSI-C quote's word boundary.
+  # xargs handles ordinary shell quotes but not Bash's $'...' form. Decode an
+  # ANSI-C quote only when it spells a possible option; otherwise retain just
+  # its word boundary.
   while [[ "$index" -lt "$length" ]]; do
     char="${command:$index:1}"
     pair="${command:$index:2}"
-    if [[ "$pair" == $'\\\n' ]]; then
-      index=$((index + 2))
-    elif [[ "$pair" == "\$'" ]]; then
-      transformed+="''"
+    if [[ "$pair" == "\$'" ]]; then
+      raw=""
       index=$((index + 2))
       while [[ "$index" -lt "$length" ]]; do
         char="${command:$index:1}"
         if [[ "$char" == "\\" ]]; then
+          raw+="${command:$index:2}"
           index=$((index + 2))
         elif [[ "$char" == "'" ]]; then
           index=$((index + 1))
           break
         else
+          raw+="$char"
           index=$((index + 1))
         fi
       done
+      decoded=$(printf '%b' "$raw")
+      if [[ "$decoded" =~ ^-[A-Za-z0-9_-]+$ ]]; then
+        transformed+="$decoded"
+      else
+        transformed+="''"
+      fi
+    elif [[ "$char" == "'" ]]; then
+      transformed+="'"
+      index=$((index + 1))
+      while [[ "$index" -lt "$length" ]]; do
+        char="${command:$index:1}"
+        pair="${command:$index:2}"
+        if [[ "$char" == "'" ]]; then
+          transformed+="'"
+          index=$((index + 1))
+          break
+        elif [[ "$pair" == $'\\\n' ]]; then
+          transformed+="__"
+          index=$((index + 2))
+        elif [[ "$char" == $'\n' ]]; then
+          transformed+="__"
+          index=$((index + 1))
+        else
+          transformed+="$char"
+          index=$((index + 1))
+        fi
+      done
+    elif [[ "$pair" == $'\\\n' ]]; then
+      index=$((index + 2))
     else
       transformed+="$char"
       index=$((index + 1))
