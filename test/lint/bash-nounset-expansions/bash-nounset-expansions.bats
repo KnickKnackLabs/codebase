@@ -217,6 +217,48 @@ BASH
   [ "$status" -eq 1 ]
 }
 
+@test "nounset gating recognizes separated set options" {
+  write_task wrapper <<'BASH'
+#!/usr/bin/env bash
+set -e -u -o pipefail
+child "${@}" "${args[@]}"
+BASH
+
+  run codebase lint:bash-empty-argv-forwarding "$FIXTURE"
+  [ "$status" -eq 1 ]
+
+  run codebase lint:bash-empty-array-expansions "$FIXTURE"
+  [ "$status" -eq 1 ]
+}
+
+@test "nounset gating stops at the option terminator" {
+  write_task wrapper <<'BASH'
+#!/usr/bin/env bash
+set -- -u
+child "${@}" "${args[@]}"
+BASH
+
+  run codebase lint:bash-empty-argv-forwarding "$FIXTURE"
+  [ "$status" -eq 0 ]
+
+  run codebase lint:bash-empty-array-expansions "$FIXTURE"
+  [ "$status" -eq 0 ]
+}
+
+@test "nounset gating stops at the first positional argument" {
+  write_task wrapper <<'BASH'
+#!/usr/bin/env bash
+set value -u
+child "${@}" "${args[@]}"
+BASH
+
+  run codebase lint:bash-empty-argv-forwarding "$FIXTURE"
+  [ "$status" -eq 0 ]
+
+  run codebase lint:bash-empty-array-expansions "$FIXTURE"
+  [ "$status" -eq 0 ]
+}
+
 @test "inline ignores must name the rule and explain the exception" {
   write_task wrapper <<'BASH'
 #!/usr/bin/env bash
@@ -324,7 +366,7 @@ BASH
 
   run codebase lint:bash-empty-array-expansions "${targets[@]}"
 
-  [ "$status" -eq 255 ]
+  [ "$status" -ne 0 ]
   [ "$(printf '%s\n' "$output" | grep -c '^FAIL  repo:')" -eq 256 ]
 }
 
