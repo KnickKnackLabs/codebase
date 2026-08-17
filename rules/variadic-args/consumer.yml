@@ -1,0 +1,8 @@
+id: variadic-args-consumer
+language: Bash
+severity: hint
+message: command may consume a variadic Usage value
+rule:
+  all:
+    - kind: command
+    - regex: '^(eval|read)([[:space:]]|$)'

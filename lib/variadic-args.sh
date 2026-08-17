@@ -1,0 +1,236 @@
+#!/usr/bin/env bash
+# Scanner for unsafe Bash consumption of variadic Mise Usage values.
+
+_CODEBASE_VARIADIC_ARGS_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_CODEBASE_VARIADIC_ARGS_RULE="$_CODEBASE_VARIADIC_ARGS_LIB_DIR/../rules/variadic-args/consumer.yml"
+# shellcheck source=./shell-files.sh
+source "$_CODEBASE_VARIADIC_ARGS_LIB_DIR/shell-files.sh"
+
+variadic_args_parse_targets() {
+  local encoded="$1"
+  local target
+
+  [[ -n "$encoded" ]] || return 0
+
+  while IFS= read -r target; do
+    [[ -n "$target" ]] && printf '%s\n' "$target"
+  done < <(printf '%s' "$encoded" | xargs printf '%s\n')
+}
+
+variadic_args_name() {
+  local name="$1"
+
+  name="${name#[}"
+  name="${name#<}"
+  name="${name%%]*}"
+  name="${name%%>*}"
+  name="${name%...}"
+  [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_-]*$ ]] || return 1
+  printf 'usage_%s\n' "$(printf '%s' "$name" | tr '-' '_')"
+}
+
+variadic_args_declared_vars() {
+  local file="$1"
+  local line spec flag
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" =~ [[:space:]]var=#true([[:space:]]|$) ]] || continue
+
+    if [[ "$line" =~ ^[[:space:]]*#USAGE[[:space:]]+arg[[:space:]] ]]; then
+      spec=$(printf '%s\n' "$line" | sed -nE 's/^[[:space:]]*#USAGE[[:space:]]+arg[[:space:]]+"([^"]+)".*/\1/p')
+      [[ -n "$spec" ]] || continue
+      variadic_args_name "$spec" || true
+    elif [[ "$line" =~ ^[[:space:]]*#USAGE[[:space:]]+flag[[:space:]] ]]; then
+      spec=$(printf '%s\n' "$line" | sed -nE 's/^[[:space:]]*#USAGE[[:space:]]+flag[[:space:]]+"([^"]+)".*/\1/p')
+      [[ -n "$spec" ]] || continue
+      if ! flag=$(printf '%s\n' "$spec" | grep -oE -- '--[A-Za-z0-9_-]+' | tail -1); then
+        continue
+      fi
+      variadic_args_name "${flag#--}" || true
+    fi
+  done < "$file"
+}
+
+variadic_args_has_reasoned_ignore() {
+  local line="$1"
+  [[ "$line" =~ codebase:ignore[[:space:]]+variadic-args[[:space:]]+.+ ]]
+}
+
+variadic_args_command_uses_var() {
+  local command="$1"
+  local var="$2"
+  local bare_re brace_re
+
+  bare_re='[$]'"$var"'([^A-Za-z0-9_]|$)'
+  brace_re='[$][{]'"$var"'([^A-Za-z0-9_]|$)'
+  [[ "$command" =~ $bare_re ]] || [[ "$command" =~ $brace_re ]]
+}
+
+variadic_args_read_uses_array() {
+  local command="$1"
+  local remaining token
+
+  [[ "$command" =~ ^read([[:space:]]|$) ]] || return 1
+  remaining="${command#read}"
+  remaining="${remaining#"${remaining%%[![:space:]]*}"}"
+
+  while [[ "$remaining" == -* ]]; do
+    token="${remaining%%[[:space:]]*}"
+    [[ "$token" != "$remaining" ]] || remaining=""
+    if [[ "$token" == "--" ]]; then
+      return 1
+    fi
+    if [[ "$token" == -*a* ]]; then
+      return 0
+    fi
+    remaining="${remaining#"$token"}"
+    remaining="${remaining#"${remaining%%[![:space:]]*}"}"
+  done
+
+  return 1
+}
+
+variadic_args_command_kind() {
+  local command="$1"
+
+  if [[ "$command" =~ ^eval([[:space:]]|$) ]]; then
+    printf '%s\n' eval
+  elif variadic_args_read_uses_array "$command"; then
+    printf '%s\n' read-array
+  else
+    return 1
+  fi
+}
+
+variadic_args_scan_file() {
+  local file="$1"
+  local ast_output record offsets start end zero_based lineno source_line command kind var
+  local -a declared
+
+  declared=()
+  while IFS= read -r var; do
+    [[ -n "$var" ]] && declared+=("$var")
+  done < <(variadic_args_declared_vars "$file")
+  [[ ${#declared[@]} -gt 0 ]] || return 0
+
+  if ! ast_output=$(ast-grep scan --stdin --rule "$_CODEBASE_VARIADIC_ARGS_RULE" --json=stream < "$file" 2>&1); then
+    printf 'ERROR: ast-grep could not scan %s\n' "$file" >&2
+    printf '%s\n' "$ast_output" >&2
+    return 2
+  fi
+
+  while IFS= read -r record; do
+    [[ -n "$record" ]] || continue
+    offsets=$(printf '%s\n' "$record" | sed -nE 's/.*"byteOffset":\{"start":([0-9]+),"end":([0-9]+)\}.*/\1 \2/p')
+    zero_based=$(printf '%s\n' "$record" | sed -nE 's/.*"start":\{"line":([0-9]+),"column":[0-9]+\}.*/\1/p')
+    [[ -n "$offsets" && -n "$zero_based" ]] || {
+      printf 'ERROR: could not parse ast-grep match for %s\n' "$file" >&2
+      return 2
+    }
+    start="${offsets%% *}"
+    end="${offsets#* }"
+    lineno=$((zero_based + 1))
+    command=$(dd if="$file" bs=1 skip="$start" count="$((end - start))" 2>/dev/null)
+
+    if ! kind=$(variadic_args_command_kind "$command"); then
+      continue
+    fi
+
+    source_line=$(sed -n "${lineno}p" "$file")
+    variadic_args_has_reasoned_ignore "$source_line" && continue
+
+    for var in ${declared[@]+"${declared[@]}"}; do
+      if variadic_args_command_uses_var "$command" "$var"; then
+        printf '%s|%s|%s|%s\n' "$lineno" "$kind" "$var" "${source_line#"${source_line%%[![:space:]]*}"}"
+      fi
+    done
+  done <<< "$ast_output"
+}
+
+variadic_args_discover_tasks() {
+  local target="$1"
+  [[ -d "$target/.mise/tasks" ]] || return 0
+  fd -t f --exclude fixtures . "$target/.mise/tasks"
+}
+
+variadic_args_lint() {
+  local encoded_targets="$1"
+  local target name toml task_files task_file rel findings finding lineno rest kind var line
+  local failures=0 hit_count target_output
+  local -a targets files
+
+  targets=()
+  while IFS= read -r target; do
+    [[ -n "$target" ]] && targets+=("$(resolve_target "$target")")
+  done < <(variadic_args_parse_targets "$encoded_targets")
+
+  if [[ ${#targets[@]} -eq 0 ]]; then
+    printf 'ERROR: at least one target is required\n' >&2
+    return 1
+  fi
+
+  for target in "${targets[@]}"; do
+    if [[ ! -e "$target" ]]; then
+      printf 'ERROR: target does not exist: %s\n' "$target" >&2
+      return 1
+    fi
+
+    name=$(basename "$target")
+    toml="$target/mise.toml"
+    if [[ -f "$toml" ]] && rg -q 'codebase:ignore[[:space:]]+variadic-args([[:space:]]|$)' "$toml"; then
+      printf 'SKIP  %s (codebase:ignore)\n' "$name"
+      continue
+    fi
+
+    if ! task_files=$(variadic_args_discover_tasks "$target"); then
+      printf 'ERROR: could not discover Mise tasks in %s\n' "$target" >&2
+      return 1
+    fi
+    files=()
+    while IFS= read -r task_file; do
+      [[ -n "$task_file" ]] && files+=("$task_file")
+    done <<< "$task_files"
+
+    if [[ ${#files[@]} -eq 0 ]]; then
+      printf 'OK    %s (no Mise tasks found)\n' "$name"
+      continue
+    fi
+
+    hit_count=0
+    target_output=""
+    for task_file in "${files[@]}"; do
+      rel="${task_file#"$target"/}"
+      if ! findings=$(variadic_args_scan_file "$task_file"); then
+        return 1
+      fi
+      while IFS= read -r finding; do
+        [[ -n "$finding" ]] || continue
+        lineno="${finding%%|*}"
+        rest="${finding#*|}"
+        kind="${rest%%|*}"
+        rest="${rest#*|}"
+        var="${rest%%|*}"
+        line="${rest#*|}"
+        target_output+="  $rel:$lineno: $line"$'\n'
+        case "$kind" in
+          eval) target_output+="    ERROR: eval of $var can execute caller-controlled shell syntax"$'\n' ;;
+          read-array) target_output+="    WARN: read -a loses Mise's quoting for multi-word $var values"$'\n' ;;
+        esac
+        hit_count=$((hit_count + 1))
+      done <<< "$findings"
+    done
+
+    if [[ "$hit_count" -gt 0 ]]; then
+      printf 'FAIL  %s: %s unsafe variadic Usage consumer(s)\n' "$name" "$hit_count"
+      printf '%s' "$target_output"
+      printf '%s\n' "  hint: parse single-line values with xargs, or use a dedicated parser when embedded newlines matter"
+      printf '%s\n' "        annotate an intentional exception with '# codebase:ignore variadic-args — <reason>'"
+      failures=$((failures + 1))
+    else
+      printf 'OK    %s (%s task file(s) clean)\n' "$name" "${#files[@]}"
+    fi
+  done
+
+  [[ "$failures" -le 255 ]] || failures=255
+  return "$failures"
+}

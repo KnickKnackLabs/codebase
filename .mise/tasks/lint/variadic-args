@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Flag unsafe consumption of variadic Usage values"
+#USAGE arg "<targets>" var=#true help="Paths to codebases to check (one or more)"
+#USAGE example "codebase lint:variadic-args ." header="Check one repository"
+#USAGE example "codebase lint:variadic-args repo-a repo-b" header="Check several repositories"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/variadic-args.sh
+source "$MISE_CONFIG_ROOT/lib/variadic-args.sh"
+
+variadic_args_lint "${usage_targets:-}"
