@@ -8,7 +8,7 @@ set -euo pipefail
 source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
 
 # Rationale: BATS test tasks should (a) declare their variadic usage so
-# `mise run test <suite>` / `mise run test -- --filter pat` Just Work,
+# `mise run test <suite>` / `mise run test --filter pat` Just Work,
 # (b) show examples so invocation is discoverable via `--help`, and
 # (c) use the flattened for-loop pattern rather than an outer
 # `if [[ $# -gt 0 ]]; then ... else ... fi`.
@@ -17,20 +17,19 @@ source "$MISE_CONFIG_ROOT/lib/shell-files.sh"
 #
 #   #!/usr/bin/env bash
 #   #MISE description="Run BATS tests"
-#   #USAGE arg "[args]..." var=#true help="..."
+#   #USAGE arg "[args]" default="" var=#true help="..."
 #   #USAGE example "..."
 #   set -euo pipefail
 #
 #   TEST_DIR="$MISE_CONFIG_ROOT/test"
-#   args=()
-#   has_target=false
-#   for arg in "$@"; do
-#     …
-#   done
-#   if ! $has_target; then
-#     args+=("$TEST_DIR/")        # or --recursive + dir for shimmer variant
+#   arguments=()
+#   if [[ -n "${usage_args:-}" ]]; then
+#     while IFS= read -r argument; do
+#       [[ -z "$argument" ]] || arguments+=("$argument")
+#     done < <(printf '%s' "$usage_args" | xargs printf '%s\n')
 #   fi
-#   bats "${args[@]}"
+#   # Resolve targets, append the default suite when none was supplied,
+#   # then invoke bats once. Repositories may customize target discovery.
 #
 # See fold/notes/bats-tool-testing.md ("The test task") for the full
 # write-up and rationale.
@@ -132,7 +131,7 @@ for target in "${TARGETS[@]}"; do
   # Required: variadic arg spec (either `var=true` or `var=#true`, either
   # order of `var=` / `help=`).
   if ! rg -q '^#USAGE arg .*var=#?true' "$task"; then
-    issues+=("missing #USAGE arg spec — expected: #USAGE arg \"[args]...\" var=#true help=\"…\"")
+    issues+=("missing #USAGE arg spec — expected: #USAGE arg \"[args]\" default=\"\" var=#true help=\"…\"")
   fi
 
   # Required: at least one example so invocation is discoverable via --help.
