@@ -160,6 +160,22 @@ BATS
   [[ "$output" == *"test/parse.bats:3"* ]]
 }
 
+@test "handles triple-quoted strings in shell double-quoted programs" {
+  write_bats parse <<'BATS'
+#!/usr/bin/env bats
+@test "parse" {
+  python3 -c "\"\"\"x \" assert hidden\"\"\"; print(1)"
+  python3 -c "\"\"\"assert hidden\"\"\"; assert value"
+}
+BATS
+
+  run codebase lint:bats-python-assertions "$TARGET"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"1 inline Python assertion"* ]]
+  [[ "$output" == *"test/parse.bats:4"* ]]
+}
+
 @test "distinguishes escaped Python quotes from later assertions" {
   write_bats parse <<'BATS'
 #!/usr/bin/env bats
