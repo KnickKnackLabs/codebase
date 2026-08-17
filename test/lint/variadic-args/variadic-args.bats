@@ -120,6 +120,7 @@ read -a SECOND <<< "${usage_args:-}"
 read -a LITERAL_SINGLE <<< '$usage_args'
 read -a LITERAL_BARE <<< \$usage_args
 read -a LITERAL_DOUBLE <<< "\$usage_args"
+usage_args=literal read -a ASSIGNMENT <<< "$other"
 BASH
 
   run codebase lint:variadic-args "$TARGET"
