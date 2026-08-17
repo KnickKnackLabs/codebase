@@ -181,24 +181,63 @@ BATS
   [[ "$output" == *"2 inline Python assertion(s)"* ]]
 }
 
-@test "removes shell continuations between ordinary quote fragments" {
+@test "recovers only complete static words after shell continuations" {
   write_bats parse <<'BATS'
 #!/usr/bin/env bats
 @test "parse" {
   python3 -c 'as'\
 'sert value'
+  python3 -c 'as'\
+'se'"rt other"
+  python3 -c 'a'\
+'s'\
+"sert third"
+  python3 -c ''\
+'assert fourth'
+
   python3 -c 'value = 1 # as'\
 'sert hidden'
   python3 -c 'print("as'\
 'sert text")'
+  python3 -c 'as'\
+'sert'"$DYNAMIC"
+  python3 -c 'as'\
+'sert'_name
+  python3 -c 'as'\
+'se' 'rt separate'
+  python3 -c "as$DYNAMIC"\
+'sert dynamic'
+  python3 -c $'assert'\
+'_ansi_name'
+  python3 -c assert\
+'_unquoted_name'
+  python3 -c "assert$DYNAMIC"\
+'_dynamic_name'
 }
 BATS
 
   run codebase lint:bats-python-assertions "$TARGET"
 
   [ "$status" -eq 1 ]
-  [[ "$output" == *"1 inline Python assertion"* ]]
+  [[ "$output" == *"4 inline Python assertion(s)"* ]]
   [[ "$output" == *"test/parse.bats:3"* ]]
+  [[ "$output" == *"test/parse.bats:5"* ]]
+  [[ "$output" == *"test/parse.bats:7"* ]]
+  [[ "$output" == *"test/parse.bats:10"* ]]
+}
+
+@test "keeps incomplete continued quote fragments conservative" {
+  write_bats parse <<'BATS'
+#!/usr/bin/env bats
+@test "parse" {
+  python3 -c 'assert'\
+'_name
+}
+BATS
+
+  run codebase lint:bats-python-assertions "$TARGET"
+
+  [ "$status" -eq 0 ]
 }
 
 @test "flags assertions after strings in shell double-quoted programs" {

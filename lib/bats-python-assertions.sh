@@ -37,48 +37,105 @@ bats_python_assertions_ident_char() {
   return 0
 }
 
+bats_python_assertions_at_shell_word_boundary() {
+  local char="${1:0:1}"
+
+  case "$char" in
+    "" | ' ' | $'\t' | $'\n' | ';' | '|' | '&' | '(' | ')' | '<' | '>') return 0 ;;
+  esac
+  return 1
+}
+
+# Return the character length of one complete ordinary shell quote fragment.
+bats_python_assertions_quote_fragment_length() {
+  local text="$1"
+  local length=${#1} cursor=1 quote char
+
+  quote="${text:0:1}"
+  [[ "$quote" == "'" || "$quote" == '"' ]] || return 1
+
+  while [[ "$cursor" -lt "$length" ]]; do
+    char="${text:$cursor:1}"
+    if [[ "$char" == "$quote" ]]; then
+      _CODEBASE_BATS_PYTHON_QUOTE_FRAGMENT_LENGTH=$((cursor + 1))
+      return 0
+    fi
+    if [[ "$quote" == '"' && "$char" == "\\" ]]; then
+      cursor=$((cursor + 2))
+    else
+      cursor=$((cursor + 1))
+    fi
+  done
+
+  return 1
+}
+
 # ast-grep ends PROGRAM before an unquoted line continuation even though Bash
 # removes it and joins the following quoted fragment into the same argument.
+# Recover the complete static word, or keep the original capture when an
+# incomplete, dynamic, or unquoted suffix makes that word uncertain.
 bats_python_assertions_extend_continued_fragments() {
+  local original="$1"
   local program="$1"
   local suffix="$2"
-  local length cursor quote char closed
+  local cursor fragment_length
+
+  _CODEBASE_BATS_PYTHON_EXTENSION_SAFE=true
+  if [[ "${suffix:0:2}" != $'\\\n' ]]; then
+    _CODEBASE_BATS_PYTHON_EXTENDED_PROGRAM="$program"
+    return 0
+  fi
+  if ! bats_python_assertions_decode_concatenated_word "$program" true; then
+    _CODEBASE_BATS_PYTHON_EXTENSION_SAFE=false
+    _CODEBASE_BATS_PYTHON_EXTENDED_PROGRAM="$original"
+    return 0
+  fi
 
   while [[ "${suffix:0:2}" == $'\\\n' ]]; do
-    length=${#suffix}
     cursor=0
     while [[ "${suffix:$cursor:2}" == $'\\\n' ]]; do
       cursor=$((cursor + 2))
     done
-    quote="${suffix:$cursor:1}"
-    [[ "$quote" == "'" || "$quote" == '"' ]] || break
-    cursor=$((cursor + 1))
-    closed=false
-
-    while [[ "$cursor" -lt "$length" ]]; do
-      char="${suffix:$cursor:1}"
-      if [[ "$char" == "$quote" ]]; then
-        cursor=$((cursor + 1))
-        closed=true
-        break
-      fi
-      if [[ "$quote" == '"' && "$char" == "\\" ]]; then
-        cursor=$((cursor + 2))
-      else
-        cursor=$((cursor + 1))
-      fi
-    done
-
-    $closed || break
-    program+="${suffix:0:$cursor}"
     suffix="${suffix:$cursor}"
+
+    if bats_python_assertions_at_shell_word_boundary "$suffix"; then
+      _CODEBASE_BATS_PYTHON_EXTENDED_PROGRAM="$program"
+      return 0
+    fi
+
+    if ! bats_python_assertions_quote_fragment_length "$suffix"; then
+      _CODEBASE_BATS_PYTHON_EXTENSION_SAFE=false
+      _CODEBASE_BATS_PYTHON_EXTENDED_PROGRAM="$original"
+      return 0
+    fi
+
+    fragment_length="$_CODEBASE_BATS_PYTHON_QUOTE_FRAGMENT_LENGTH"
+    program+=$'\\\n'"${suffix:0:$fragment_length}"
+    suffix="${suffix:$fragment_length}"
+
+    while [[ "${suffix:0:1}" == "'" || "${suffix:0:1}" == '"' ]]; do
+      if ! bats_python_assertions_quote_fragment_length "$suffix"; then
+        _CODEBASE_BATS_PYTHON_EXTENSION_SAFE=false
+        _CODEBASE_BATS_PYTHON_EXTENDED_PROGRAM="$original"
+        return 0
+      fi
+      fragment_length="$_CODEBASE_BATS_PYTHON_QUOTE_FRAGMENT_LENGTH"
+      program+="${suffix:0:$fragment_length}"
+      suffix="${suffix:$fragment_length}"
+    done
   done
+
+  if ! bats_python_assertions_at_shell_word_boundary "$suffix"; then
+    _CODEBASE_BATS_PYTHON_EXTENSION_SAFE=false
+    program="$original"
+  fi
 
   _CODEBASE_BATS_PYTHON_EXTENDED_PROGRAM="$program"
 }
 
 bats_python_assertions_decode_concatenated_word() {
   local word="$1"
+  local allow_single="${2:-false}"
   local length=${#1} i=0 char next quote quote_count=0 decoded=""
 
   while [[ "$i" -lt "$length" ]]; do
@@ -118,7 +175,7 @@ bats_python_assertions_decode_concatenated_word() {
     i=$((i + 1))
   done
 
-  [[ "$quote_count" -gt 1 ]] || return 1
+  [[ "$quote_count" -gt 1 || "$allow_single" == true ]] || return 1
   _CODEBASE_BATS_PYTHON_DECODED_WORD="$decoded"
 }
 
@@ -325,7 +382,7 @@ bats_python_assertions_program_offsets() {
 
 bats_python_assertions_scan_file() {
   local file="$1"
-  local ast_output record offsets program_offsets start end command_end zero_based lineno command program source_line suffix
+  local ast_output record offsets program_offsets start end command_end zero_based lineno command program source_line suffix suffix_probe
 
   if ! ast_output=$(ast-grep scan --stdin --rule "$_CODEBASE_BATS_PYTHON_RULE" --json=stream < "$file" 2>&1); then
     printf 'ERROR: ast-grep could not scan %s\n' "$file" >&2
@@ -360,8 +417,22 @@ bats_python_assertions_scan_file() {
     start="${program_offsets%% *}"
     end="${program_offsets#* }"
     program=$(dd if="$file" bs=1 skip="$start" count="$((end - start))" 2>/dev/null)
-    suffix=$(dd if="$file" bs=1 skip="$end" count="$((command_end - end))" 2>/dev/null)
+    if [[ "$end" -lt "$command_end" ]]; then
+      suffix=$(dd if="$file" bs=1 skip="$end" count="$((command_end - end))" 2>/dev/null)
+    else
+      # An incomplete continued fragment can make ast-grep end the command at
+      # PROGRAM. Preserve the probe's newline long enough to detect that case,
+      # then read the file suffix only when recovery actually needs it.
+      suffix_probe=$({ dd if="$file" bs=1 skip="$end" count=2 2>/dev/null; printf x; })
+      suffix_probe="${suffix_probe%x}"
+      if [[ "$suffix_probe" == $'\\\n' ]]; then
+        suffix=$(dd if="$file" bs=1 skip="$end" 2>/dev/null)
+      else
+        suffix=""
+      fi
+    fi
     bats_python_assertions_extend_continued_fragments "$program" "$suffix"
+    $_CODEBASE_BATS_PYTHON_EXTENSION_SAFE || continue
     program="$_CODEBASE_BATS_PYTHON_EXTENDED_PROGRAM"
     bats_python_assertions_program_has_assert "$program" || continue
 
