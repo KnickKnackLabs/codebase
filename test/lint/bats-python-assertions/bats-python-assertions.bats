@@ -51,6 +51,8 @@ BATS
   run --separate-stderr python3 -c 'assert value'
   run ! python3 -c 'assert value'
   run -1 python3 -c 'assert value'
+  run -00 python3 -c 'assert value'
+  run -001 python3 -c 'assert value'
   run -255 python3 -c 'assert value'
   run -- python3 -c 'assert value'
   run -1 --keep-empty-lines --separate-stderr -- python3 -c 'assert value'
@@ -60,7 +62,7 @@ BATS
   run codebase lint:bats-python-assertions "$TARGET"
 
   [ "$status" -eq 1 ]
-  [[ "$output" == *"6 inline Python assertion(s)"* ]]
+  [[ "$output" == *"8 inline Python assertion(s)"* ]]
 }
 
 @test "stops BATS run option recognition at the terminator" {
