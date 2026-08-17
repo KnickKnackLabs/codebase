@@ -121,28 +121,31 @@ codebase_scope_for_rule() {
   local value
 
   if [[ -f "$toml" ]] && value=$(mise config get -f "$toml" "_.codebase.scope.$rule" 2>/dev/null); then
-    if [[ -n "$value" ]]; then
-      printf '%s\n' "$value"
-      return 0
-    fi
+    printf '%s\n' "$value"
+    return 0
   fi
 
   codebase_default_scope_for_rule "$rule"
 }
 
-# codebase_target_for_rule <repo-root> <rule>
+# codebase_targets_for_rule <repo-root> <rule>
 #
-# Emit the concrete target path for a rule after scope resolution.
-codebase_target_for_rule() {
+# Emit concrete target paths after scope resolution, one per line.
+codebase_targets_for_rule() {
   local repo_root="$1"
   local rule="$2"
-  local scope
+  local scope token
 
   scope=$(codebase_scope_for_rule "$repo_root" "$rule")
 
-  case "$scope" in
-    ""|".") printf '%s\n' "$repo_root" ;;
-    /*) printf '%s\n' "$scope" ;;
-    *) printf '%s/%s\n' "$repo_root" "$scope" ;;
-  esac
+  while IFS= read -r token; do
+    case "$token" in
+      .) printf '%s\n' "$repo_root" ;;
+      /*) printf '%s\n' "$token" ;;
+      *) printf '%s/%s\n' "$repo_root" "$token" ;;
+    esac
+  done < <(printf '%s\n' "$scope" | awk '{
+    gsub(/[\[\]",]/, " ")
+    for (i = 1; i <= NF; i++) print $i
+  }')
 }

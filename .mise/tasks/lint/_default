@@ -36,11 +36,24 @@ failures=0
 FAILED=()
 
 for rule in "${RULES[@]}"; do
-  rule_target=$(codebase_target_for_rule "$REPO_ROOT" "$rule")
-  echo "codebase: lint:$rule $rule_target"
+  TARGETS=()
+  while IFS= read -r t; do
+    [[ -n "$t" ]] && TARGETS+=("$t")
+  done < <(codebase_targets_for_rule "$REPO_ROOT" "$rule")
+
+  if [[ ${#TARGETS[@]} -eq 0 ]]; then
+    echo "ERROR: lint:$rule scope resolved to no targets" >&2
+    failures=$((failures + 1))
+    FAILED+=("lint:$rule scope resolved to no targets")
+    continue
+  fi
+
+  printf 'codebase: lint:%s' "$rule"
+  printf ' %s' "${TARGETS[@]}"
+  printf '\n'
 
   output=""
-  if output=$(mise run -q "lint:$rule" "$rule_target" 2>&1); then
+  if output=$(mise run -q "lint:$rule" "${TARGETS[@]}" 2>&1); then
     status=0
   else
     status=$?
@@ -52,7 +65,7 @@ for rule in "${RULES[@]}"; do
 
   if [[ "$status" -ne 0 ]]; then
     failures=$((failures + 1))
-    FAILED+=("lint:$rule ($rule_target) exited $status")
+    FAILED+=("lint:$rule (${TARGETS[*]}) exited $status")
   fi
 done
 
