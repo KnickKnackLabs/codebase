@@ -68,11 +68,9 @@ variadic_args_command_uses_var() {
 
 variadic_args_command_words() {
   local command="$1"
-  local continuation=$'\\\n'
   local transformed="" char pair
   local index=0 length
 
-  command="${command//$continuation/}"
   length="${#command}"
 
   # xargs handles ordinary shell quotes but not Bash's $'...' form. The
@@ -80,7 +78,9 @@ variadic_args_command_words() {
   while [[ "$index" -lt "$length" ]]; do
     char="${command:$index:1}"
     pair="${command:$index:2}"
-    if [[ "$pair" == "\$'" ]]; then
+    if [[ "$pair" == $'\\\n' ]]; then
+      index=$((index + 2))
+    elif [[ "$pair" == "\$'" ]]; then
       transformed+="''"
       index=$((index + 2))
       while [[ "$index" -lt "$length" ]]; do

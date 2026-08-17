@@ -58,6 +58,22 @@ BASH
   [[ "$output" == *"usage_query_term"* ]]
 }
 
+@test "recognizes read options across line continuations" {
+  write_task search <<'BASH'
+#!/usr/bin/env bash
+#USAGE arg "[args]" var=#true
+read \
+  -r \
+  -a ARGS <<< "$usage_args"
+BASH
+
+  run codebase lint:variadic-args "$TARGET"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"WARN: read -a loses Mise's quoting"* ]]
+  [[ "$output" == *".mise/tasks/search:3: read \\"* ]]
+}
+
 @test "recognizes assignment-prefixed commands without matching assignment values" {
   write_task search <<'BASH'
 #!/usr/bin/env bash
