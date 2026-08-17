@@ -1,0 +1,15 @@
+id: variadic-args-expansion
+language: Bash
+severity: hint
+message: variable expansion may supply a variadic Usage value
+rule:
+  all:
+    - kind: variable_name
+    - regex: '^[A-Za-z_][A-Za-z0-9_]*$'
+    - any:
+        - inside:
+            kind: simple_expansion
+            stopBy: end
+        - inside:
+            kind: expansion
+            stopBy: end

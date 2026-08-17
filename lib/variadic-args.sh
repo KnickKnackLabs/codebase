@@ -3,6 +3,7 @@
 
 _CODEBASE_VARIADIC_ARGS_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _CODEBASE_VARIADIC_ARGS_RULE="$_CODEBASE_VARIADIC_ARGS_LIB_DIR/../rules/variadic-args/consumer.yml"
+_CODEBASE_VARIADIC_ARGS_EXPANSION_RULE="$_CODEBASE_VARIADIC_ARGS_LIB_DIR/../rules/variadic-args/expansion.yml"
 # shellcheck source=./shell-files.sh
 source "$_CODEBASE_VARIADIC_ARGS_LIB_DIR/shell-files.sh"
 
@@ -66,6 +67,25 @@ variadic_args_command_uses_var() {
   [[ "$command" =~ $bare_re ]] || [[ "$command" =~ $brace_re ]]
 }
 
+variadic_args_range_expands_var() {
+  local expansions="$1"
+  local command_start="$2"
+  local command_end="$3"
+  local var="$4"
+  local expansion_start expansion_var
+
+  while IFS='|' read -r expansion_start expansion_var; do
+    [[ -n "$expansion_start" && -n "$expansion_var" ]] || continue
+    if [[ "$expansion_start" -ge "$command_start" &&
+          "$expansion_start" -lt "$command_end" &&
+          "$expansion_var" == "$var" ]]; then
+      return 0
+    fi
+  done <<< "$expansions"
+
+  return 1
+}
+
 variadic_args_command_words() {
   local command="$1"
   local transformed="" char pair raw decoded ansi_control
@@ -123,7 +143,11 @@ variadic_args_command_words() {
           transformed+="__"
           index=$((index + 1))
         else
-          transformed+="$char"
+          if [[ "$char" == '$' ]]; then
+            transformed+="."
+          else
+            transformed+="$char"
+          fi
           index=$((index + 1))
         fi
       done
@@ -140,7 +164,11 @@ variadic_args_command_words() {
         elif [[ "$pair" == $'\\\n' ]]; then
           index=$((index + 2))
         elif [[ "$char" == "\\" ]]; then
-          transformed+="${command:$index:2}"
+          if [[ "${command:$((index + 1)):1}" == '$' ]]; then
+            transformed+="."
+          else
+            transformed+="${command:$index:2}"
+          fi
           index=$((index + 2))
         else
           transformed+="$char"
@@ -150,7 +178,11 @@ variadic_args_command_words() {
     elif [[ "$pair" == $'\\\n' ]]; then
       index=$((index + 2))
     elif [[ "$char" == "\\" ]]; then
-      transformed+="${command:$index:2}"
+      if [[ "${command:$((index + 1)):1}" == '$' ]]; then
+        transformed+="."
+      else
+        transformed+="${command:$index:2}"
+      fi
       index=$((index + 2))
     else
       transformed+="$char"
@@ -226,7 +258,8 @@ variadic_args_command_kind() {
 
 variadic_args_scan_file() {
   local file="$1"
-  local ast_output record end command_start zero_based lineno source_line command kind var
+  local ast_output expansion_output expansions="" record
+  local end command_start zero_based lineno source_line command kind var
   local -a declared
 
   declared=()
@@ -240,6 +273,20 @@ variadic_args_scan_file() {
     printf '%s\n' "$ast_output" >&2
     return 2
   fi
+  if ! expansion_output=$(ast-grep scan --stdin --rule "$_CODEBASE_VARIADIC_ARGS_EXPANSION_RULE" --json=stream < "$file" 2>&1); then
+    printf 'ERROR: ast-grep could not scan expansions in %s\n' "$file" >&2
+    printf '%s\n' "$expansion_output" >&2
+    return 2
+  fi
+  while IFS= read -r record; do
+    [[ -n "$record" ]] || continue
+    record=$(printf '%s\n' "$record" | sed -nE 's/^\{"text":"([A-Za-z_][A-Za-z0-9_]*)","range":\{"byteOffset":\{"start":([0-9]+),.*/\2|\1/p')
+    [[ -n "$record" ]] || {
+      printf 'ERROR: could not parse ast-grep expansion match for %s\n' "$file" >&2
+      return 2
+    }
+    expansions+="$record"$'\n'
+  done <<< "$expansion_output"
 
   while IFS= read -r record; do
     [[ -n "$record" ]] || continue
@@ -263,7 +310,9 @@ variadic_args_scan_file() {
     variadic_args_has_reasoned_ignore "$source_line" && continue
 
     for var in ${declared[@]+"${declared[@]}"}; do
-      if variadic_args_command_uses_var "$command" "$var"; then
+      if [[ "$kind" == eval ]] && variadic_args_command_uses_var "$command" "$var"; then
+        printf '%s|%s|%s|%s\n' "$lineno" "$kind" "$var" "${source_line#"${source_line%%[![:space:]]*}"}"
+      elif [[ "$kind" == read-array ]] && variadic_args_range_expands_var "$expansions" "$command_start" "$end" "$var"; then
         printf '%s|%s|%s|%s\n' "$lineno" "$kind" "$var" "${source_line#"${source_line%%[![:space:]]*}"}"
       fi
     done
