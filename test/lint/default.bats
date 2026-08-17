@@ -14,12 +14,17 @@ write_config() {
   cat > "$REPO/mise.toml"
 }
 
-write_clean_task() {
-  mkdir -p "$REPO/.mise/tasks"
-  cat > "$REPO/.mise/tasks/clean" <<'EOF'
+write_clean_script() {
+  local dir="$1"
+  mkdir -p "$REPO/$dir"
+  cat > "$REPO/$dir/clean" <<'EOF'
 #!/usr/bin/env bash
 echo ok
 EOF
+}
+
+write_clean_task() {
+  write_clean_script .mise/tasks
 }
 
 write_bad_table_script() {
@@ -180,6 +185,99 @@ EOF
   run codebase lint "$REPO"
   [ "$status" -ne 0 ]
   [[ "$output" == *"no lint rules configured"* ]]
+}
+
+@test "lint: honors multi-path scope (space-separated targets)" {
+  write_config <<'EOF'
+[settings]
+quiet = true
+task_output = "interleave"
+
+[_.codebase]
+lint = ["gum-table"]
+
+[_.codebase.scope]
+gum-table = ".mise/tasks scripts"
+EOF
+
+  write_bad_table_script .mise/tasks
+  write_bad_table_script scripts
+
+  run codebase lint "$REPO"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/.mise/tasks $REPO_ROOT/scripts"* ]]
+  [[ "$output" == *"WARN"*"tasks:table"* ]]
+  [[ "$output" == *"scripts:table"* ]]
+}
+
+@test "lint: honors multi-path scope written as a TOML array" {
+  write_config <<'EOF'
+[settings]
+quiet = true
+task_output = "interleave"
+
+[_.codebase]
+lint = ["gum-table"]
+
+[_.codebase.scope]
+gum-table = [".mise/tasks", "scripts"]
+EOF
+
+  write_clean_task
+  write_clean_script scripts
+
+  run codebase lint "$REPO"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/.mise/tasks $REPO_ROOT/scripts"* ]]
+  [ "$(printf '%s\n' "$output" | grep -c 'OK    no manual table formatting found')" -eq 1 ]
+  [[ "$output" != *'['* ]]
+  [[ "$output" != *'"'* ]]
+}
+
+@test "lint: does not glob scope values against its own directory" {
+  write_config <<'EOF'
+[settings]
+quiet = true
+task_output = "interleave"
+
+[_.codebase]
+lint = ["gum-table"]
+
+[_.codebase.scope]
+gum-table = "lib/*.sh"
+EOF
+
+  write_clean_task
+  write_clean_script lib
+
+  run codebase lint "$REPO"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"codebase: lint:gum-table $REPO_ROOT/lib/*.sh"* ]]
+  [[ "$output" != *"codebase-config.sh"* ]]
+  [[ "$output" != *"shell-files.sh"* ]]
+}
+
+@test "lint: rejects empty scope values" {
+  write_clean_task
+
+  for scope in '""' '"  "' '[]'; do
+    cat > "$REPO/mise.toml" <<EOF
+[settings]
+quiet = true
+task_output = "interleave"
+
+[_.codebase]
+lint = ["gum-table"]
+
+[_.codebase.scope]
+gum-table = $scope
+EOF
+
+    run codebase lint "$REPO"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"lint:gum-table scope resolved to no targets"* ]]
+    [[ "$output" != *"lint rule(s) passed"* ]]
+  done
 }
 
 @test "lint: parses multiline lint arrays" {
