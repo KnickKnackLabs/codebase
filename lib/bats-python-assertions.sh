@@ -42,6 +42,7 @@ bats_python_assertions_program_has_assert() {
   local outer=""
   local state=code quote="" triple=false
   local length i=0 char next previous after slash_count cursor
+  local escaped_triple='\"\"\"'
 
   length=${#program}
   if [[ "$length" -ge 3 \
@@ -75,10 +76,17 @@ bats_python_assertions_program_has_assert() {
 
     if [[ "$state" == string ]]; then
       # Inside an outer shell double quote, Python quote delimiters remain
-      # backslash-escaped in the source ast-grep captures. A 1 mod 4 run of
-      # backslashes becomes an even run before the Python quote, so it closes
-      # the string; a 3 mod 4 run remains an escaped quote inside the string.
+      # backslash-escaped in the source ast-grep captures. Three adjacent \"
+      # sequences close a triple string. In an ordinary string, a 1 mod 4 run
+      # becomes even before the Python quote and closes it; a 3 mod 4 run
+      # remains an escaped quote inside the string.
       if [[ "$outer" == '"' && "$quote" == '"' && "$char" == "\\" ]]; then
+        if $triple && [[ "${program:$i:6}" == "$escaped_triple" ]]; then
+          state=code
+          triple=false
+          i=$((i + 6))
+          continue
+        fi
         slash_count=0
         cursor="$i"
         while [[ "$cursor" -lt "$length" && "${program:$cursor:1}" == "\\" ]]; do
@@ -86,7 +94,7 @@ bats_python_assertions_program_has_assert() {
           cursor=$((cursor + 1))
         done
         if [[ "${program:$cursor:1}" == '"' ]]; then
-          if [[ $((slash_count % 4)) -eq 1 ]]; then
+          if ! $triple && [[ $((slash_count % 4)) -eq 1 ]]; then
             state=code
           fi
           i=$((cursor + 1))
@@ -133,8 +141,17 @@ bats_python_assertions_program_has_assert() {
     fi
 
     # A double-quoted shell word keeps Python double quotes escaped in the raw
-    # source. Only a 1 mod 4 backslash run begins a Python string; a 3 mod 4
-    # run represents an escaped quote within an already-open Python string.
+    # source. Three adjacent \" sequences begin a triple string. Otherwise,
+    # a 1 mod 4 backslash run begins an ordinary Python string; a 3 mod 4 run
+    # represents an escaped quote within an already-open Python string.
+    if [[ "$outer" == '"' && "${program:$i:6}" == "$escaped_triple" ]]; then
+      quote='"'
+      state=string
+      triple=true
+      i=$((i + 6))
+      continue
+    fi
+
     if [[ "$outer" == '"' && "$char" == "\\" ]]; then
       slash_count=0
       cursor="$i"
