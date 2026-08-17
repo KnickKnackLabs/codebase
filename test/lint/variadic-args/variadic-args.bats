@@ -83,6 +83,19 @@ BASH
   [ "$status" -eq 0 ]
 }
 
+@test "recognizes read -a after the flag-only uppercase E option" {
+  write_task search <<'BASH'
+#!/usr/bin/env bash
+#USAGE arg "[args]" var=#true
+read -E -a ARGS <<< "$usage_args"
+BASH
+
+  run codebase lint:variadic-args "$TARGET"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"WARN: read -a loses Mise's quoting"* ]]
+}
+
 @test "stops read option recognition at the terminator" {
   write_task search <<'BASH'
 #!/usr/bin/env bash

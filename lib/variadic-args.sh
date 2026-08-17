@@ -91,7 +91,7 @@ variadic_args_read_uses_array() {
       option="${options:$option_index:1}"
       case "$option" in
         a) return 0 ;;
-        e|r|s) option_index=$((option_index + 1)) ;;
+        E|e|r|s) option_index=$((option_index + 1)) ;;
         d|i|n|N|p|t|u)
           if [[ "$option_index" -eq $((${#options} - 1)) ]]; then
             index=$((index + 1))
