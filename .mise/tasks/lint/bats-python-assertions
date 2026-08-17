@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Flag inline Python assertions in BATS tests"
+#USAGE arg "<targets>" var=#true help="Paths to codebases or BATS files to check"
+#USAGE example "codebase lint:bats-python-assertions ." header="Check one repository"
+#USAGE example "codebase lint:bats-python-assertions repo-a repo-b" header="Check several repositories"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/bats-python-assertions.sh
+source "$MISE_CONFIG_ROOT/lib/bats-python-assertions.sh"
+
+bats_python_assertions_lint "${usage_targets:-}"

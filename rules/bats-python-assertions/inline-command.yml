@@ -1,0 +1,11 @@
+id: bats-python-inline-command
+language: Bash
+severity: hint
+message: inline Python command in a BATS test
+rule:
+  any:
+    - pattern: $PYTHON -c $PROGRAM
+    - pattern: run $PYTHON -c $PROGRAM
+constraints:
+  PYTHON:
+    regex: '^python3?$'
