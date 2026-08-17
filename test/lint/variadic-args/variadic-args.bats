@@ -129,6 +129,25 @@ BASH
   [[ "$output" == *"2 unsafe variadic Usage consumer"* ]]
 }
 
+@test "cross-references real expansions in unquoted read heredocs only" {
+  write_task search <<'BASH'
+#!/usr/bin/env bash
+#USAGE arg "[args]" var=#true
+read -r -a EXPANDED <<EOF
+$usage_args
+EOF
+read -r -a LITERAL <<'EOF'
+$usage_args
+EOF
+BASH
+
+  run codebase lint:variadic-args "$TARGET"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"1 unsafe variadic Usage consumer"* ]]
+  [[ "$output" == *".mise/tasks/search:3: read -r -a EXPANDED"* ]]
+}
+
 @test "does not normalize literal or invalid read words into array options" {
   write_task search <<'BASH'
 #!/usr/bin/env bash
