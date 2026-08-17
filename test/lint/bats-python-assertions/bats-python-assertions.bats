@@ -115,6 +115,8 @@ BATS
   python3 -c "print(\"assert value\")"
   python3 -c 'print("x; assert value")'
   python3 -c 'value = 1  # assert value'
+  python3 -c 'éassert = 1; print(éassert)'
+  python3 -c 'asserté = 1; print(asserté)'
 }
 BATS
 
