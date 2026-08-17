@@ -92,6 +92,42 @@ BASH
   [[ "$output" == *"WARN: read -a loses Mise's quoting"* ]]
 }
 
+@test "preserves expansion context for read array names" {
+  write_task search <<'BASH'
+#!/usr/bin/env bash
+#USAGE arg "[args]" var=#true
+read -a STATIC <<< "$usage_args"
+read -a 'QUOTED_STATIC' <<< "$usage_args"
+read -a "$array_name" <<< "$usage_args"
+read -a "${array_name:-DEFAULT}" <<< "$usage_args"
+read -a '$array_name' <<< "$usage_args"
+read -a \$array_name <<< "$usage_args"
+read -a "\$array_name" <<< "$usage_args"
+BASH
+
+  run codebase lint:variadic-args "$TARGET"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"4 unsafe variadic Usage consumer"* ]]
+}
+
+@test "cross-references only real variadic value expansions for read" {
+  write_task search <<'BASH'
+#!/usr/bin/env bash
+#USAGE arg "[args]" var=#true
+read -a FIRST <<< "$usage_args"
+read -a SECOND <<< "${usage_args:-}"
+read -a LITERAL_SINGLE <<< '$usage_args'
+read -a LITERAL_BARE <<< \$usage_args
+read -a LITERAL_DOUBLE <<< "\$usage_args"
+BASH
+
+  run codebase lint:variadic-args "$TARGET"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"2 unsafe variadic Usage consumer"* ]]
+}
+
 @test "does not normalize literal or invalid read words into array options" {
   write_task search <<'BASH'
 #!/usr/bin/env bash
