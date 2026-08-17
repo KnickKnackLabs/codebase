@@ -95,7 +95,7 @@ variadic_args_command_words() {
           index=$((index + 1))
         fi
       done
-      decoded=$(printf '%b' "$raw")
+      printf -v decoded '%b' "$raw"
       if [[ "$decoded" =~ ^-[A-Za-z0-9_-]+$ ]]; then
         transformed+="$decoded"
       else

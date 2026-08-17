@@ -89,12 +89,13 @@ BASH
   [[ "$output" == *"WARN: read -a loses Mise's quoting"* ]]
 }
 
-@test "does not normalize a continuation inside a single-quoted read word" {
+@test "does not normalize quoted read words into array options" {
   write_task search <<'BASH'
 #!/usr/bin/env bash
 #USAGE arg "[args]" var=#true
 read '-\
 a' VALUE <<< "$usage_args"
+read $'-a\n' VALUE <<< "$usage_args"
 BASH
 
   run codebase lint:variadic-args "$TARGET"
