@@ -108,6 +108,23 @@ BATS
   [ "$status" -eq 0 ]
 }
 
+@test "handles ANSI-C quoted Python programs" {
+  write_bats parse <<'BATS'
+#!/usr/bin/env bats
+@test "parse" {
+  python3 -c $'value = 1\nassert value'
+  python3 -c $'print("assert text")'
+  python3 -c $'value = 1  # assert hidden\nprint(value)'
+  python3 -c $'value = 1  # assert hidden\nassert value'
+}
+BATS
+
+  run codebase lint:bats-python-assertions "$TARGET"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"2 inline Python assertion(s)"* ]]
+}
+
 @test "flags assertions after strings in shell double-quoted programs" {
   write_bats parse <<'BATS'
 #!/usr/bin/env bats
