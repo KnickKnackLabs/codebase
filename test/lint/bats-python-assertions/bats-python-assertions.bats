@@ -44,6 +44,38 @@ BATS
   [[ "$output" == *"inline Python assertion"* ]]
 }
 
+@test "flags BATS run assertions after supported run options" {
+  write_bats parse <<'BATS'
+#!/usr/bin/env bats
+@test "parse" {
+  run --separate-stderr python3 -c 'assert value'
+  run ! python3 -c 'assert value'
+  run -1 python3 -c 'assert value'
+  run -- python3 -c 'assert value'
+  run -1 --keep-empty-lines --separate-stderr -- python3 -c 'assert value'
+}
+BATS
+
+  run codebase lint:bats-python-assertions "$TARGET"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"5 inline Python assertion(s)"* ]]
+}
+
+@test "stops BATS run option recognition at the terminator" {
+  write_bats parse <<'BATS'
+#!/usr/bin/env bats
+@test "parse" {
+  run -- --separate-stderr python3 -c 'assert value'
+  run -- -1 python3 -c 'assert value'
+}
+BATS
+
+  run codebase lint:bats-python-assertions "$TARGET"
+
+  [ "$status" -eq 0 ]
+}
+
 @test "flags multiline inline Python commands" {
   write_bats parse <<'BATS'
 #!/usr/bin/env bats
