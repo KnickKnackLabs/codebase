@@ -1,0 +1,9 @@
+id: variadic-args-redirect
+language: Bash
+severity: hint
+message: redirect path does not directly supply a variadic Usage value
+rule:
+  any:
+    - kind: file_redirect
+    - kind: herestring_redirect
+    - kind: heredoc_redirect

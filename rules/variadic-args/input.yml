@@ -4,7 +4,17 @@ severity: hint
 message: redirected input may supply a variadic Usage value
 rule:
   any:
-    - kind: heredoc_body
+    - kind: herestring_redirect
+    - all:
+        - kind: heredoc_body
+        - inside:
+            all:
+              - kind: heredoc_redirect
+              - not:
+                  has:
+                    kind: file_descriptor
+                    stopBy: neighbor
+            stopBy: neighbor
     - all:
         - kind: file_redirect
         - regex: '^<[[:space:]]*<[[:space:]]*[(]'

@@ -28,7 +28,12 @@ rule:
             stopBy: neighbor
         - has:
             any:
-              - kind: heredoc_body
+              - all:
+                  - kind: heredoc_redirect
+                  - not:
+                      has:
+                        kind: file_descriptor
+                        stopBy: neighbor
               - all:
                   - kind: file_redirect
                   - regex: '^<[[:space:]]*<[[:space:]]*[(]'

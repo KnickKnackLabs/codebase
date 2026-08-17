@@ -1,0 +1,16 @@
+id: variadic-args-stdin
+language: Bash
+severity: hint
+message: redirect may replace a command's standard input
+rule:
+  any:
+    - kind: herestring_redirect
+    - all:
+        - kind: heredoc_redirect
+        - not:
+            has:
+              kind: file_descriptor
+              stopBy: neighbor
+    - all:
+        - kind: file_redirect
+        - regex: '^<[[:space:]]'
