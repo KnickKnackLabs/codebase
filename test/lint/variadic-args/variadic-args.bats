@@ -58,6 +58,31 @@ BASH
   [[ "$output" == *"usage_query_term"* ]]
 }
 
+@test "recognizes read -a after an option argument" {
+  write_task search <<'BASH'
+#!/usr/bin/env bash
+#USAGE arg "[args]" var=#true
+read -n 1 -a ARGS <<< "$usage_args"
+BASH
+
+  run codebase lint:variadic-args "$TARGET"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"WARN: read -a loses Mise's quoting"* ]]
+}
+
+@test "does not treat an attached read option argument as -a" {
+  write_task search <<'BASH'
+#!/usr/bin/env bash
+#USAGE arg "[args]" var=#true
+read -da VALUE <<< "$usage_args"
+BASH
+
+  run codebase lint:variadic-args "$TARGET"
+
+  [ "$status" -eq 0 ]
+}
+
 @test "stops read option recognition at the terminator" {
   write_task search <<'BASH'
 #!/usr/bin/env bash

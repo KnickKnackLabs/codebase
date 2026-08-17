@@ -68,23 +68,41 @@ variadic_args_command_uses_var() {
 
 variadic_args_read_uses_array() {
   local command="$1"
-  local remaining token
+  local token options option
+  local index option_index
+  local -a words
 
   [[ "$command" =~ ^read([[:space:]]|$) ]] || return 1
-  remaining="${command#read}"
-  remaining="${remaining#"${remaining%%[![:space:]]*}"}"
 
-  while [[ "$remaining" == -* ]]; do
-    token="${remaining%%[[:space:]]*}"
-    [[ "$token" != "$remaining" ]] || remaining=""
-    if [[ "$token" == "--" ]]; then
-      return 1
-    fi
-    if [[ "$token" == -*a* ]]; then
-      return 0
-    fi
-    remaining="${remaining#"$token"}"
-    remaining="${remaining#"${remaining%%[![:space:]]*}"}"
+  words=()
+  while IFS= read -r token; do
+    words+=("$token")
+  done < <(printf '%s' "$command" | xargs printf '%s\n')
+
+  index=1
+  while [[ "$index" -lt "${#words[@]}" ]]; do
+    token="${words[$index]}"
+    [[ "$token" == "--" ]] && return 1
+    [[ "$token" == -* && "$token" != "-" ]] || return 1
+
+    options="${token#-}"
+    option_index=0
+    while [[ "$option_index" -lt "${#options}" ]]; do
+      option="${options:$option_index:1}"
+      case "$option" in
+        a) return 0 ;;
+        e|r|s) option_index=$((option_index + 1)) ;;
+        d|i|n|N|p|t|u)
+          if [[ "$option_index" -eq $((${#options} - 1)) ]]; then
+            index=$((index + 1))
+          fi
+          break
+          ;;
+        *) return 1 ;;
+      esac
+    done
+
+    index=$((index + 1))
   done
 
   return 1
