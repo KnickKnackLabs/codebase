@@ -41,7 +41,7 @@ bats_python_assertions_program_has_assert() {
   local program="$1"
   local outer=""
   local state=code quote="" triple=false
-  local length i=0 char next previous after slash_count cursor
+  local length i=0 char next previous after slash_count cursor joined
   local escaped_triple='\"\"\"'
 
   length=${#program}
@@ -63,6 +63,37 @@ bats_python_assertions_program_has_assert() {
     fi
   fi
 
+  if [[ "$outer" == '"' ]]; then
+    # Bash removes an odd final backslash and the following newline inside a
+    # double-quoted word before Python sees the program. Preserve paired
+    # backslashes and literal newlines from even-length runs.
+    joined=""
+    i=0
+    while [[ "$i" -lt "$length" ]]; do
+      char="${program:$i:1}"
+      if [[ "$char" == "\\" ]]; then
+        cursor="$i"
+        while [[ "$cursor" -lt "$length" && "${program:$cursor:1}" == "\\" ]]; do
+          cursor=$((cursor + 1))
+        done
+        if [[ "${program:$cursor:1}" == $'\n' ]]; then
+          slash_count=$((cursor - i))
+          joined+="${program:$i:$((slash_count - slash_count % 2))}"
+          if [[ $((slash_count % 2)) -eq 0 ]]; then
+            joined+=$'\n'
+          fi
+          i=$((cursor + 1))
+          continue
+        fi
+      fi
+      joined+="$char"
+      i=$((i + 1))
+    done
+    program="$joined"
+    length=${#program}
+  fi
+
+  i=0
   while [[ "$i" -lt "$length" ]]; do
     char="${program:$i:1}"
 

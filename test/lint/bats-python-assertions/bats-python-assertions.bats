@@ -146,6 +146,24 @@ BATS
   [[ "$output" == *"3 inline Python assertion(s)"* ]]
 }
 
+@test "models shell line continuations before scanning Python" {
+  write_bats parse <<'BATS'
+#!/usr/bin/env bats
+@test "parse" {
+  python3 -c "value = 1 # assert text remains in the shell-joined comment\
+assert False"
+  python3 -c "as\
+sert value"
+}
+BATS
+
+  run codebase lint:bats-python-assertions "$TARGET"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"1 inline Python assertion"* ]]
+  [[ "$output" == *"test/parse.bats:5"* ]]
+}
+
 @test "flags assertions after strings in shell double-quoted programs" {
   write_bats parse <<'BATS'
 #!/usr/bin/env bats
