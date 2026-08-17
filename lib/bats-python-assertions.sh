@@ -24,7 +24,7 @@ bats_python_assertions_has_reasoned_ignore() {
 
 bats_python_assertions_ident_char() {
   local char="$1"
-  local code
+  local LC_ALL=C
 
   [[ "$char" =~ [A-Za-z0-9_] ]] && return 0
   [[ -n "$char" ]] || return 1
@@ -32,8 +32,9 @@ bats_python_assertions_ident_char() {
   # Python identifiers may contain non-ASCII letters and combining marks.
   # Treat every non-ASCII character as identifier-like so a keyword-shaped
   # substring in a valid Unicode name does not become a lint false positive.
-  printf -v code '%d' "'$char"
-  [[ "$code" -gt 127 ]]
+  # The C locale keeps the printable range byte-oriented on Bash 3.2.
+  [[ "$char" == [[:cntrl:]] || "$char" == [\ -~] ]] && return 1
+  return 0
 }
 
 bats_python_assertions_program_has_assert() {
