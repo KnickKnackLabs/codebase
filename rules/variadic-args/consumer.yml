@@ -3,9 +3,26 @@ language: Bash
 severity: hint
 message: command may consume a variadic Usage value
 rule:
-  all:
-    - kind: command
-    - has:
-        kind: command_name
-        regex: '^(eval|read)$'
-        stopBy: neighbor
+  any:
+    - all:
+        - kind: command
+        - has:
+            kind: command_name
+            regex: '^eval$'
+            stopBy: neighbor
+    - all:
+        - kind: command
+        - not:
+            inside:
+              kind: redirected_statement
+              stopBy: end
+        - has:
+            kind: command_name
+            regex: '^read$'
+            stopBy: neighbor
+    - all:
+        - kind: redirected_statement
+        - has:
+            kind: command_name
+            regex: '^read$'
+            stopBy: end
