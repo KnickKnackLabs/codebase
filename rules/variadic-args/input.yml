@@ -1,0 +1,10 @@
+id: variadic-args-input
+language: Bash
+severity: hint
+message: redirected input may supply a variadic Usage value
+rule:
+  any:
+    - kind: heredoc_body
+    - all:
+        - kind: file_redirect
+        - regex: '^<[[:space:]]*<[[:space:]]*[(]'

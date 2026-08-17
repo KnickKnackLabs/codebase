@@ -4,6 +4,7 @@
 _CODEBASE_VARIADIC_ARGS_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _CODEBASE_VARIADIC_ARGS_RULE="$_CODEBASE_VARIADIC_ARGS_LIB_DIR/../rules/variadic-args/consumer.yml"
 _CODEBASE_VARIADIC_ARGS_EXPANSION_RULE="$_CODEBASE_VARIADIC_ARGS_LIB_DIR/../rules/variadic-args/expansion.yml"
+_CODEBASE_VARIADIC_ARGS_INPUT_RULE="$_CODEBASE_VARIADIC_ARGS_LIB_DIR/../rules/variadic-args/input.yml"
 # shellcheck source=./shell-files.sh
 source "$_CODEBASE_VARIADIC_ARGS_LIB_DIR/shell-files.sh"
 
@@ -69,19 +70,79 @@ variadic_args_command_uses_var() {
 
 variadic_args_range_expands_var() {
   local expansions="$1"
-  local command_start="$2"
-  local command_end="$3"
-  local var="$4"
-  local expansion_start expansion_var
+  local consumer_ranges="$2"
+  local input_ranges="$3"
+  local command_start="$4"
+  local command_end="$5"
+  local var="$6"
+  local expansion_start expansion_var nested_start nested_end input_start input_end
+  local nested redirected
 
   while IFS='|' read -r expansion_start expansion_var; do
     [[ -n "$expansion_start" && -n "$expansion_var" ]] || continue
-    if [[ "$expansion_start" -ge "$command_start" &&
-          "$expansion_start" -lt "$command_end" &&
-          "$expansion_var" == "$var" ]]; then
+    [[ "$expansion_start" -ge "$command_start" &&
+       "$expansion_start" -lt "$command_end" &&
+       "$expansion_var" == "$var" ]] || continue
+
+    redirected=false
+    if variadic_args_range_has_shorter "$consumer_ranges" "$command_start" "$command_end"; then
+      while IFS='|' read -r input_start input_end; do
+        [[ -n "$input_start" && -n "$input_end" ]] || continue
+        if [[ "$input_start" -ge "$command_start" &&
+              "$input_end" -le "$command_end" &&
+              "$expansion_start" -ge "$input_start" &&
+              "$expansion_start" -lt "$input_end" ]]; then
+          redirected=true
+          break
+        fi
+      done <<< "$input_ranges"
+      $redirected || continue
+    fi
+
+    nested=false
+    while IFS='|' read -r nested_start nested_end; do
+      [[ -n "$nested_start" && -n "$nested_end" ]] || continue
+      if [[ "$nested_start" -gt "$command_start" &&
+            "$expansion_start" -ge "$nested_start" &&
+            "$expansion_start" -lt "$nested_end" ]]; then
+        nested=true
+        break
+      fi
+    done <<< "$consumer_ranges"
+    $nested || return 0
+  done <<< "$expansions"
+
+  return 1
+}
+
+variadic_args_range_is_maximal() {
+  local consumer_ranges="$1"
+  local command_start="$2"
+  local command_end="$3"
+  local other_start other_end
+
+  while IFS='|' read -r other_start other_end; do
+    [[ -n "$other_start" && -n "$other_end" ]] || continue
+    if [[ "$other_start" -eq "$command_start" && "$other_end" -gt "$command_end" ]]; then
+      return 1
+    fi
+  done <<< "$consumer_ranges"
+
+  return 0
+}
+
+variadic_args_range_has_shorter() {
+  local consumer_ranges="$1"
+  local command_start="$2"
+  local command_end="$3"
+  local other_start other_end
+
+  while IFS='|' read -r other_start other_end; do
+    [[ -n "$other_start" && -n "$other_end" ]] || continue
+    if [[ "$other_start" -eq "$command_start" && "$other_end" -lt "$command_end" ]]; then
       return 0
     fi
-  done <<< "$expansions"
+  done <<< "$consumer_ranges"
 
   return 1
 }
@@ -258,7 +319,8 @@ variadic_args_command_kind() {
 
 variadic_args_scan_file() {
   local file="$1"
-  local ast_output expansion_output expansions="" record
+  local ast_output expansion_output input_output
+  local expansions="" consumer_ranges="" input_ranges="" record
   local end command_start zero_based lineno source_line command kind var
   local -a declared
 
@@ -278,6 +340,21 @@ variadic_args_scan_file() {
     printf '%s\n' "$expansion_output" >&2
     return 2
   fi
+  if ! input_output=$(ast-grep scan --stdin --rule "$_CODEBASE_VARIADIC_ARGS_INPUT_RULE" --json=stream < "$file" 2>&1); then
+    printf 'ERROR: ast-grep could not scan redirected inputs in %s\n' "$file" >&2
+    printf '%s\n' "$input_output" >&2
+    return 2
+  fi
+  while IFS= read -r record; do
+    [[ -n "$record" ]] || continue
+    record=$(printf '%s\n' "$record" | sed -nE 's/^\{"text":.*"range":\{"byteOffset":\{"start":([0-9]+),"end":([0-9]+)\}.*/\1|\2/p')
+    [[ -n "$record" ]] || {
+      printf 'ERROR: could not parse ast-grep redirected input match for %s\n' "$file" >&2
+      return 2
+    }
+    input_ranges+="$record"$'\n'
+  done <<< "$input_output"
+
   while IFS= read -r record; do
     [[ -n "$record" ]] || continue
     record=$(printf '%s\n' "$record" | sed -nE 's/^\{"text":"([A-Za-z_][A-Za-z0-9_]*)","range":\{"byteOffset":\{"start":([0-9]+),.*/\2|\1/p')
@@ -291,6 +368,17 @@ variadic_args_scan_file() {
   while IFS= read -r record; do
     [[ -n "$record" ]] || continue
     end=$(printf '%s\n' "$record" | sed -nE 's/.*"range":\{"byteOffset":\{"start":[0-9]+,"end":([0-9]+)\}.*\},"file":.*/\1/p')
+    command_start=$(printf '%s\n' "$record" | sed -nE 's/.*"secondary":\[\{"text":"(eval|read)","range":\{"byteOffset":\{"start":([0-9]+),.*/\2/p')
+    [[ -n "$end" && -n "$command_start" ]] || {
+      printf 'ERROR: could not parse ast-grep match for %s\n' "$file" >&2
+      return 2
+    }
+    consumer_ranges+="$command_start|$end"$'\n'
+  done <<< "$ast_output"
+
+  while IFS= read -r record; do
+    [[ -n "$record" ]] || continue
+    end=$(printf '%s\n' "$record" | sed -nE 's/.*"range":\{"byteOffset":\{"start":[0-9]+,"end":([0-9]+)\}.*\},"file":.*/\1/p')
     # Start at ast-grep's secondary command-name range so assignment values do
     # not need to be reparsed as shell words.
     command_start=$(printf '%s\n' "$record" | sed -nE 's/.*"secondary":\[\{"text":"(eval|read)","range":\{"byteOffset":\{"start":([0-9]+),.*/\2/p')
@@ -299,6 +387,7 @@ variadic_args_scan_file() {
       printf 'ERROR: could not parse ast-grep match for %s\n' "$file" >&2
       return 2
     }
+    variadic_args_range_is_maximal "$consumer_ranges" "$command_start" "$end" || continue
     lineno=$((zero_based + 1))
     command=$(dd if="$file" bs=1 skip="$command_start" count="$((end - command_start))" 2>/dev/null)
 
@@ -312,7 +401,7 @@ variadic_args_scan_file() {
     for var in ${declared[@]+"${declared[@]}"}; do
       if [[ "$kind" == eval ]] && variadic_args_command_uses_var "$command" "$var"; then
         printf '%s|%s|%s|%s\n' "$lineno" "$kind" "$var" "${source_line#"${source_line%%[![:space:]]*}"}"
-      elif [[ "$kind" == read-array ]] && variadic_args_range_expands_var "$expansions" "$command_start" "$end" "$var"; then
+      elif [[ "$kind" == read-array ]] && variadic_args_range_expands_var "$expansions" "$consumer_ranges" "$input_ranges" "$command_start" "$end" "$var"; then
         printf '%s|%s|%s|%s\n' "$lineno" "$kind" "$var" "${source_line#"${source_line%%[![:space:]]*}"}"
       fi
     done

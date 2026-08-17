@@ -148,6 +148,54 @@ BASH
   [[ "$output" == *".mise/tasks/search:3: read -r -a EXPANDED"* ]]
 }
 
+@test "keeps redirected ranges scoped to actual read input" {
+  write_task search <<'BASH'
+#!/usr/bin/env bash
+#USAGE arg "[args]" var=#true
+read -a HERE_STRING <<< "$usage_args"
+read -a PROCESS < <(printf '%s' "$usage_args")
+read -a INPUT_PATH < "$usage_args"
+read -a OUTPUT_PATH </dev/null > "$usage_args"
+read -a FD_PATH 3> "$usage_args" </dev/null
+read -a OUTPUT_PROCESS </dev/null > >(printf '%s' "$usage_args")
+read -a HEREDOC_OUTPUT <<EOF > "$usage_args"
+literal
+EOF
+BASH
+
+  run codebase lint:variadic-args "$TARGET"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"2 unsafe variadic Usage consumer"* ]]
+  [[ "$output" == *"HERE_STRING"* ]]
+  [[ "$output" == *"PROCESS"* ]]
+  [[ "$output" != *"INPUT_PATH"* ]]
+  [[ "$output" != *"OUTPUT_PATH"* ]]
+  [[ "$output" != *"FD_PATH"* ]]
+  [[ "$output" != *"OUTPUT_PROCESS"* ]]
+  [[ "$output" != *"HEREDOC_OUTPUT"* ]]
+}
+
+@test "attributes nested read expansions to the innermost consumer" {
+  write_task search <<'BASH'
+#!/usr/bin/env bash
+#USAGE arg "[args]" var=#true
+read -a OUTER <<< "$(
+  read -a INNER <<< "$usage_args"
+  printf '%s' "$other"
+)"
+cat <<EOF
+$(read -a HEREDOC_NESTED <<< "$usage_args")
+EOF
+BASH
+
+  run codebase lint:variadic-args "$TARGET"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"2 unsafe variadic Usage consumer"* ]]
+  [[ "$output" == *".mise/tasks/search:4: read -a INNER"* ]]
+}
+
 @test "does not normalize literal or invalid read words into array options" {
   write_task search <<'BASH'
 #!/usr/bin/env bash
