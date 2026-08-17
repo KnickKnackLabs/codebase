@@ -66,20 +66,44 @@ variadic_args_command_uses_var() {
   [[ "$command" =~ $bare_re ]] || [[ "$command" =~ $brace_re ]]
 }
 
+variadic_args_is_assignment() {
+  local token="$1"
+  local assignment_re='^[A-Za-z_][A-Za-z0-9_]*(\[[^]]+\])?\+?='
+
+  [[ "$token" =~ $assignment_re ]]
+}
+
+variadic_args_command_name() {
+  local command="$1"
+  local token
+
+  while IFS= read -r token; do
+    if ! variadic_args_is_assignment "$token"; then
+      printf '%s\n' "$token"
+      return 0
+    fi
+  done < <(printf '%s' "$command" | xargs printf '%s\n')
+
+  return 1
+}
+
 variadic_args_read_uses_array() {
   local command="$1"
   local token options option
   local index option_index
   local -a words
 
-  [[ "$command" =~ ^read([[:space:]]|$) ]] || return 1
-
   words=()
   while IFS= read -r token; do
     words+=("$token")
   done < <(printf '%s' "$command" | xargs printf '%s\n')
 
-  index=1
+  index=0
+  while [[ "$index" -lt "${#words[@]}" ]] && variadic_args_is_assignment "${words[$index]}"; do
+    index=$((index + 1))
+  done
+  [[ "$index" -lt "${#words[@]}" && "${words[$index]}" == read ]] || return 1
+  index=$((index + 1))
   while [[ "$index" -lt "${#words[@]}" ]]; do
     token="${words[$index]}"
     [[ "$token" == "--" ]] && return 1
@@ -110,10 +134,15 @@ variadic_args_read_uses_array() {
 
 variadic_args_command_kind() {
   local command="$1"
+  local name
 
-  if [[ "$command" =~ ^eval([[:space:]]|$) ]]; then
+  if ! name=$(variadic_args_command_name "$command"); then
+    return 1
+  fi
+
+  if [[ "$name" == eval ]]; then
     printf '%s\n' eval
-  elif variadic_args_read_uses_array "$command"; then
+  elif [[ "$name" == read ]] && variadic_args_read_uses_array "$command"; then
     printf '%s\n' read-array
   else
     return 1
@@ -139,8 +168,8 @@ variadic_args_scan_file() {
 
   while IFS= read -r record; do
     [[ -n "$record" ]] || continue
-    offsets=$(printf '%s\n' "$record" | sed -nE 's/.*"byteOffset":\{"start":([0-9]+),"end":([0-9]+)\}.*/\1 \2/p')
-    zero_based=$(printf '%s\n' "$record" | sed -nE 's/.*"start":\{"line":([0-9]+),"column":[0-9]+\}.*/\1/p')
+    offsets=$(printf '%s\n' "$record" | sed -nE 's/.*"range":\{"byteOffset":\{"start":([0-9]+),"end":([0-9]+)\}.*\},"file":.*/\1 \2/p')
+    zero_based=$(printf '%s\n' "$record" | sed -nE 's/.*"range":\{.*"start":\{"line":([0-9]+),"column":[0-9]+\}.*\},"file":.*/\1/p')
     [[ -n "$offsets" && -n "$zero_based" ]] || {
       printf 'ERROR: could not parse ast-grep match for %s\n' "$file" >&2
       return 2

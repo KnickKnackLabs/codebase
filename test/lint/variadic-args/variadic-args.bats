@@ -21,7 +21,7 @@ write_task() {
 #!/usr/bin/env bash
 #USAGE arg "[args]" var=#true
 set -euo pipefail
-eval "ARGS=(${usage_args:-})"
+LC_ALL=C eval "ARGS=(${usage_args:-})"
 BASH
 
   run codebase lint:variadic-args "$TARGET"
@@ -56,6 +56,21 @@ BASH
 
   [ "$status" -eq 1 ]
   [[ "$output" == *"usage_query_term"* ]]
+}
+
+@test "recognizes assignment-prefixed commands without matching assignment values" {
+  write_task search <<'BASH'
+#!/usr/bin/env bash
+#USAGE arg "[args]" var=#true
+DESCRIPTION='read -ra DECOY' printf '%s\n' "$usage_args"
+MODE+=strict IFS=' ' read -ra ARGS <<< "$usage_args"
+BASH
+
+  run codebase lint:variadic-args "$TARGET"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"1 unsafe variadic Usage consumer"* ]]
+  [[ "$output" == *"MODE+=strict IFS=' ' read -ra ARGS"* ]]
 }
 
 @test "recognizes read -a after an option argument" {
