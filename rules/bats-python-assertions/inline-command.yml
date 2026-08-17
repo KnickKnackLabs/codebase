@@ -14,8 +14,8 @@ constraints:
   PYTHON:
     regex: '^python3?$'
   RUN_LAST:
-    regex: '^(!|-(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])|--keep-empty-lines|--separate-stderr|--)$'
+    regex: '^(!|-0*(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])|--keep-empty-lines|--separate-stderr|--)$'
   RUN_OPTION_1: &run-option
-    regex: '^(!|-(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])|--keep-empty-lines|--separate-stderr)$'
+    regex: '^(!|-0*(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])|--keep-empty-lines|--separate-stderr)$'
   RUN_OPTION_2: *run-option
   RUN_OPTION_3: *run-option
