@@ -6,6 +6,16 @@ rule:
   any:
     - pattern: $PYTHON -c $PROGRAM
     - pattern: run $PYTHON -c $PROGRAM
+    - pattern: run $RUN_OPTION $PYTHON -c $PROGRAM
+    - pattern: run $RUN_OPTION_1 $RUN_OPTION_2 $PYTHON -c $PROGRAM
+    - pattern: run $RUN_OPTION_1 $RUN_OPTION_2 $RUN_OPTION_3 $PYTHON -c $PROGRAM
+    - pattern: run $RUN_OPTION_1 $RUN_OPTION_2 $RUN_OPTION_3 $RUN_OPTION_4 $PYTHON -c $PROGRAM
 constraints:
   PYTHON:
     regex: '^python3?$'
+  RUN_OPTION: &run-option
+    regex: '^(!|-[0-9]+|--keep-empty-lines|--separate-stderr|--)$'
+  RUN_OPTION_1: *run-option
+  RUN_OPTION_2: *run-option
+  RUN_OPTION_3: *run-option
+  RUN_OPTION_4: *run-option
