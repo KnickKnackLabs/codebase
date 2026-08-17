@@ -5,4 +5,7 @@ message: command may consume a variadic Usage value
 rule:
   all:
     - kind: command
-    - regex: '^(eval|read)([[:space:]]|$)'
+    - has:
+        kind: command_name
+        regex: '^(eval|read)$'
+        stopBy: neighbor
