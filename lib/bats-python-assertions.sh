@@ -56,7 +56,7 @@ bats_python_assertions_program_has_assert() {
     char="${program:$i:1}"
 
     if [[ "$state" == comment ]]; then
-      if [[ "$char" == $'\n' ]]; then
+      if [[ "$char" == $'\n' || "$char" == $'\r' ]]; then
         state=code
       fi
       i=$((i + 1))

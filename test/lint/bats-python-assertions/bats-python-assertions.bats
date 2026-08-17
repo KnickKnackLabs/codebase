@@ -131,13 +131,15 @@ BATS
   python3 -c $'print("assert text")'
   python3 -c $'value = 1  # assert hidden\nprint(value)'
   python3 -c $'value = 1  # assert hidden\nassert value'
+  python3 -c $'value = 1  # assert hidden\rprint(value)'
+  python3 -c $'value = 1  # assert hidden\rassert value'
 }
 BATS
 
   run codebase lint:bats-python-assertions "$TARGET"
 
   [ "$status" -eq 1 ]
-  [[ "$output" == *"2 inline Python assertion(s)"* ]]
+  [[ "$output" == *"3 inline Python assertion(s)"* ]]
 }
 
 @test "flags assertions after strings in shell double-quoted programs" {
