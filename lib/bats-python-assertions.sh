@@ -37,15 +37,62 @@ bats_python_assertions_ident_char() {
   return 0
 }
 
+bats_python_assertions_decode_concatenated_word() {
+  local word="$1"
+  local length=${#1} i=0 char next quote quote_count=0 decoded=""
+
+  while [[ "$i" -lt "$length" ]]; do
+    quote="${word:$i:1}"
+    [[ "$quote" == "'" || "$quote" == '"' ]] || return 1
+    quote_count=$((quote_count + 1))
+    i=$((i + 1))
+
+    while [[ "$i" -lt "$length" && "${word:$i:1}" != "$quote" ]]; do
+      char="${word:$i:1}"
+      if [[ "$quote" == '"' ]]; then
+        # Runtime expansions make the resulting Python program dynamic.
+        [[ "$char" != '$' && "$char" != '`' ]] || return 1
+        if [[ "$char" == "\\" ]]; then
+          next="${word:$((i + 1)):1}"
+          if [[ "$next" == $'\n' ]]; then
+            i=$((i + 2))
+            continue
+          fi
+          if [[ "$next" == '"' || "$next" == "\\" ]]; then
+            decoded+="$next"
+            i=$((i + 2))
+            continue
+          fi
+        fi
+      fi
+      decoded+="$char"
+      i=$((i + 1))
+    done
+
+    [[ "$i" -lt "$length" ]] || return 1
+    i=$((i + 1))
+  done
+
+  [[ "$quote_count" -gt 1 ]] || return 1
+  _CODEBASE_BATS_PYTHON_DECODED_WORD="$decoded"
+}
+
 bats_python_assertions_program_has_assert() {
   local program="$1"
+  local shell_decoded="${2:-false}"
   local outer=""
   local state=code quote="" triple=false
   local length i=0 char next previous after slash_count cursor joined
   local escaped_triple='\"\"\"'
 
+  if [[ "$shell_decoded" != true ]] \
+    && bats_python_assertions_decode_concatenated_word "$program"; then
+    bats_python_assertions_program_has_assert "$_CODEBASE_BATS_PYTHON_DECODED_WORD" true
+    return $?
+  fi
+
   length=${#program}
-  if [[ "$length" -ge 3 \
+  if [[ "$shell_decoded" != true && "$length" -ge 3 \
     && "${program:0:2}" == "\$'" \
     && "${program:$((length - 1)):1}" == "'" ]]; then
     # ast-grep preserves ANSI-C shell quoting. Decode it before applying
@@ -53,7 +100,7 @@ bats_python_assertions_program_has_assert() {
     program="${program:2:$((length - 3))}"
     printf -v program '%b' "$program"
     length=${#program}
-  elif [[ "$length" -ge 2 ]]; then
+  elif [[ "$shell_decoded" != true && "$length" -ge 2 ]]; then
     char="${program:0:1}"
     next="${program:$((length - 1)):1}"
     if [[ ( "$char" == "'" || "$char" == '"' ) && "$next" == "$char" ]]; then

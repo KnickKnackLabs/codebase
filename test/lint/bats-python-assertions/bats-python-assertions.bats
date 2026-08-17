@@ -164,6 +164,23 @@ BATS
   [[ "$output" == *"test/parse.bats:5"* ]]
 }
 
+@test "handles Python programs assembled from shell quote fragments" {
+  write_bats parse <<'BATS'
+#!/usr/bin/env bats
+@test "parse" {
+  python3 -c 'as'"sert value"
+  python3 -c "as"'sert other'
+  python3 -c 'value = 1 # as'"sert hidden"
+  python3 -c 'print('"'"'assert text'"'"')'
+}
+BATS
+
+  run codebase lint:bats-python-assertions "$TARGET"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"2 inline Python assertion(s)"* ]]
+}
+
 @test "flags assertions after strings in shell double-quoted programs" {
   write_bats parse <<'BATS'
 #!/usr/bin/env bats
