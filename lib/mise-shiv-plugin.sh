@@ -26,7 +26,19 @@ mise_shiv_tools_declared() {
     return 1
   fi
 
-  printf '%s\n' "$tools" | grep -qE '^"shiv:[^"]+"[[:space:]]*='
+  if grep -qE '^"shiv:[^"]+"[[:space:]]*=' <<< "$tools"; then
+    return 0
+  fi
+
+  # Mise renders table-form tool options such as
+  # [tools."shiv:codebase"] as ["shiv:codebase"] here.
+  grep -qE '^\["shiv:[^"]+"(\.|\])' <<< "$tools"
+}
+
+mise_shiv_plugin_source_valid() {
+  local source="$1"
+
+  [[ "$source" =~ ^https://github\.com/KnickKnackLabs/vfox-shiv(\.git)?(#[^[:space:]]+)?$ ]]
 }
 
 mise_shiv_config_value() {
@@ -94,7 +106,7 @@ mise_shiv_plugin_lint() {
     fi
 
     [[ "$experimental" == "true" ]] || missing+=("settings.experimental = true")
-    [[ "$plugin" == "$_MISE_SHIV_PLUGIN_URL" ]] || missing+=("plugins.shiv = \"$_MISE_SHIV_PLUGIN_URL\"")
+    mise_shiv_plugin_source_valid "$plugin" || missing+=("plugins.shiv = \"$_MISE_SHIV_PLUGIN_URL\"")
 
     if [[ ${#missing[@]} -eq 0 ]]; then
       echo "OK    $name"
