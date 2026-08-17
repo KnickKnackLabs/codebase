@@ -34,7 +34,15 @@ bats_python_assertions_program_has_assert() {
   local length i=0 char next previous after slash_count cursor
 
   length=${#program}
-  if [[ "$length" -ge 2 ]]; then
+  if [[ "$length" -ge 3 \
+    && "${program:0:2}" == "\$'" \
+    && "${program:$((length - 1)):1}" == "'" ]]; then
+    # ast-grep preserves ANSI-C shell quoting. Decode it before applying
+    # Python lexical rules so escaped newlines end Python comments correctly.
+    program="${program:2:$((length - 3))}"
+    printf -v program '%b' "$program"
+    length=${#program}
+  elif [[ "$length" -ge 2 ]]; then
     char="${program:0:1}"
     next="${program:$((length - 1)):1}"
     if [[ ( "$char" == "'" || "$char" == '"' ) && "$next" == "$char" ]]; then
