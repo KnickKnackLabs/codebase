@@ -1,38 +1,42 @@
 #!/usr/bin/env bash
 #MISE description="Run BATS test suite"
-#USAGE arg "[args]..." var=#true help="Test suites, files, or bats flags"
-#USAGE example "mise run test" header="Run all tests"
-#USAGE example "mise run test lint/bats-test-task" header="Run a specific suite by path"
-#USAGE example "mise run test test/lint/or-true/or-true.bats" header="Run a specific file"
-#USAGE example "mise run test -- --filter rejects" header="Filter tests by name"
-set -eo pipefail
+#USAGE arg "[args]" default="" var=#true help="Test suites, files, or BATS arguments"
+#USAGE example "mise run test" header="Run all maintained tests"
+#USAGE example "mise run test lint/bats-test-task" header="Run a suite directory by path"
+#USAGE example "mise run test test/lint/or-true/or-true.bats" header="Run one test file"
+#USAGE example "mise run test --filter rejects" header="Filter tests by name"
+set -euo pipefail
 
 TEST_DIR="$MISE_CONFIG_ROOT/test"
 
-args=()
-has_target=false
+arguments=()
+if [[ -n "${usage_args:-}" ]]; then
+  while IFS= read -r argument; do
+    [[ -z "$argument" ]] || arguments+=("$argument")
+  done < <(printf '%s' "$usage_args" | xargs printf '%s\n')
+fi
 
-for arg in "$@"; do
-  if [[ "$arg" != -* && "$arg" != *.bats && -d "$TEST_DIR/$arg" ]]; then
-    args+=("$TEST_DIR/$arg")
+resolved=()
+has_target=false
+for argument in ${arguments[@]+"${arguments[@]}"}; do
+  if [[ "$argument" != -* && -d "$TEST_DIR/$argument" ]]; then
+    resolved+=("$TEST_DIR/$argument")
+    has_target=true
+  elif [[ "$argument" != -* && -f "$TEST_DIR/$argument.bats" ]]; then
+    resolved+=("$TEST_DIR/$argument.bats")
     has_target=true
   else
-    [[ "$arg" == *.bats || -d "$arg" ]] && has_target=true
-    args+=("$arg")
+    [[ "$argument" == *.bats || -d "$argument" ]] && has_target=true
+    resolved+=("$argument")
   fi
 done
 
 if ! $has_target; then
-  # Enumerate real test files explicitly — the lint-rule fixtures under
-  # test/lint/*/fixtures/ contain synthetic .bats files (intentionally bad
-  # inputs for the rules), and bats' --recursive walk would otherwise try
-  # to execute them. fd's '--exclude fixtures' is path-component-aware,
-  # so it skips only nested 'fixtures/' dirs. This is a standard codebase-
-  # self-hosting wrinkle — other repos can use the simpler
-  # `args+=("--recursive" "$TEST_DIR/")` from the canonical.
-  while IFS= read -r f; do
-    args+=("$f")
+  # Codebase's lint fixtures intentionally contain invalid .bats files.
+  # Enumerate maintained tests instead of recursively executing fixtures.
+  while IFS= read -r test_file; do
+    resolved+=("$test_file")
   done < <(fd -t f -e bats --exclude fixtures . "$TEST_DIR" | LC_ALL=C sort)
 fi
 
-bats "${args[@]}"
+exec bats ${resolved[@]+"${resolved[@]}"}

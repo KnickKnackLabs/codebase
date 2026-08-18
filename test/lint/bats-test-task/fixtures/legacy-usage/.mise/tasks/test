@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-#MISE description="Run BATS test suite"
-#USAGE arg "[args]" default="" var=#true help="Test suites, files, or BATS arguments"
+#MISE description="Run BATS tests"
+#USAGE arg "[args]..." var=#true help="Test suites or BATS arguments"
 #USAGE example "mise run test" header="Run all tests"
-#USAGE example "mise run test gpg" header="Run a specific suite"
+#USAGE example "mise run test doctor" header="Run a specific suite by name"
+#USAGE example "mise run test --filter rejects" header="Filter tests by name"
 set -euo pipefail
 
 TEST_DIR="$MISE_CONFIG_ROOT/test"
@@ -17,8 +18,8 @@ fi
 resolved=()
 has_target=false
 for argument in ${arguments[@]+"${arguments[@]}"}; do
-  if [[ "$argument" != -* && -d "$TEST_DIR/$argument" ]]; then
-    resolved+=("$TEST_DIR/$argument")
+  if [[ "$argument" != -* && -f "$TEST_DIR/$argument.bats" ]]; then
+    resolved+=("$TEST_DIR/$argument.bats")
     has_target=true
   else
     [[ "$argument" == *.bats || -d "$argument" ]] && has_target=true
@@ -27,7 +28,7 @@ for argument in ${arguments[@]+"${arguments[@]}"}; do
 done
 
 if ! $has_target; then
-  resolved+=("--recursive" "$TEST_DIR/")
+  resolved+=("$TEST_DIR/")
 fi
 
 exec bats ${resolved[@]+"${resolved[@]}"}
