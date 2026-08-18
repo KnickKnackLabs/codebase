@@ -20,7 +20,8 @@ write_task() {
 #!/usr/bin/env bash
 #USAGE arg "[args]" default="" var=#true
 #USAGE flag "--to <to>" default="" var=#true
-prefix=ok eval "${usage_args}" pre "$usage_to"
+prefix=ok eval "${usage_args}"
+eval pre "$usage_to"
 BASH
 
   run codebase lint:variadic-args "$FIXTURE"
@@ -28,6 +29,7 @@ BASH
   [ "$status" -eq 1 ]
   [[ "$output" == *"2 known unsafe"* ]]
   [[ "$output" == *'eval "${usage_args}"'* ]]
+  [[ "$output" == *'eval pre "$usage_to"'* ]]
 }
 
 @test "flags the current legacy read idiom with an assignment prefix" {
