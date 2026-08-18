@@ -110,12 +110,18 @@ variadic_args_scan_eval() {
 
 variadic_args_read_payload() {
   local command="$1"
-  local command_json redirect redirect_json payload
+  local command_json redirect redirect_json payload analyzer_status
 
   # shellcheck disable=SC2016 # ast-grep metavariable syntax is literal.
-  if ! command_json=$(printf '%s' "$command" |
+  if command_json=$(printf '%s' "$command" |
     ast-grep run --lang bash --pattern 'read $$$ARGS' --json=compact --stdin 2>&1); then
-    return 1
+    :
+  else
+    analyzer_status=$?
+    [[ "$analyzer_status" -eq 1 && "$command_json" == '[]' ]] && return 1
+    printf '%s\n' 'ERROR: ast-grep could not parse a read command' >&2
+    printf '%s\n' "$command_json" >&2
+    return 2
   fi
 
   if ! redirect=$(printf '%s' "$command_json" | jq -jr '
@@ -130,22 +136,32 @@ variadic_args_read_payload() {
            ($array | test("^[A-Za-z_][A-Za-z0-9_]*$"))
         then $args[-1].text else empty end
       end
-    end' 2>/dev/null); then
-    return 1
+    end' 2>&1); then
+    printf '%s\n' 'ERROR: could not parse ast-grep read arguments' >&2
+    printf '%s\n' "$redirect" >&2
+    return 2
   fi
   [[ -n "$redirect" ]] || return 1
 
   # shellcheck disable=SC2016 # ast-grep metavariable syntax is literal.
-  if ! redirect_json=$(printf '%s' "$redirect" |
+  if redirect_json=$(printf '%s' "$redirect" |
     ast-grep run --lang bash --pattern '<<< $PAYLOAD' --json=compact --stdin 2>&1); then
-    return 1
+    :
+  else
+    analyzer_status=$?
+    [[ "$analyzer_status" -eq 1 && "$redirect_json" == '[]' ]] && return 1
+    printf '%s\n' 'ERROR: ast-grep could not parse a read here-string' >&2
+    printf '%s\n' "$redirect_json" >&2
+    return 2
   fi
   if ! payload=$(printf '%s' "$redirect_json" |
     jq -jr --arg redirect "$redirect" '
       if length == 1 and .[0].text == $redirect
       then .[0].metaVariables.single.PAYLOAD.text
-      else empty end' 2>/dev/null); then
-    return 1
+      else empty end' 2>&1); then
+    printf '%s\n' 'ERROR: could not parse ast-grep read here-string output' >&2
+    printf '%s\n' "$payload" >&2
+    return 2
   fi
   [[ -n "$payload" ]] || return 1
 
@@ -159,7 +175,7 @@ variadic_args_read_payload() {
 variadic_args_scan_read() {
   local file="$1"
   shift
-  local ast_output commands command_start command_end name_start lineno count command name
+  local ast_output commands command_start command_end name_start lineno count command name payload_status
 
   if ! ast_output=$(ast-grep scan \
     --rule "$_CODEBASE_VARIADIC_RULE_DIR/read-command.yml" \
@@ -186,8 +202,14 @@ variadic_args_scan_read() {
       printf 'ERROR: could not materialize read command in %s\n' "$file" >&2
       return 1
     fi
-    name=$(variadic_args_read_payload "$command") || continue
-    variadic_args_is_declared "$name" "$@" || continue
+    if name=$(variadic_args_read_payload "$command"); then
+      variadic_args_is_declared "$name" "$@" || continue
+    else
+      payload_status=$?
+      [[ "$payload_status" -eq 1 ]] && continue
+      printf 'ERROR: could not inspect read consumer in %s\n' "$file" >&2
+      return "$payload_status"
+    fi
     printf '%s\tread\t%s\n' "$lineno" "$name"
   done <<< "$commands"
 }
