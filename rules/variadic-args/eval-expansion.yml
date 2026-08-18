@@ -1,0 +1,29 @@
+id: variadic-args-eval-expansion
+language: Bash
+rule:
+  all:
+    - any:
+        - kind: simple_expansion
+        - kind: expansion
+    - regex: '^\$\{?usage_[A-Za-z_][A-Za-z0-9_]*\}?$'
+    - not:
+        inside:
+          kind: variable_assignment
+          stopBy:
+            kind: command
+    - inside:
+        kind: command
+        all:
+          - has:
+              field: name
+              regex: ^eval$
+          - not:
+              has:
+                kind: file_redirect
+                stopBy: end
+          - not:
+              inside:
+                kind: redirected_statement
+                stopBy: neighbor
+        stopBy:
+          kind: command

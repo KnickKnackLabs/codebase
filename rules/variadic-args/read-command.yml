@@ -1,0 +1,16 @@
+id: variadic-args-read-command
+language: Bash
+rule:
+  kind: command
+  all:
+    - has:
+        field: name
+        regex: ^read$
+    - not:
+        has:
+          kind: file_redirect
+          stopBy: end
+    - not:
+        inside:
+          kind: redirected_statement
+          stopBy: neighbor
