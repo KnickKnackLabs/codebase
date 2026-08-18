@@ -28,11 +28,12 @@ load ../test_helper
   [[ "$output" != *"beta"* ]]
 }
 
-@test "test task clears inherited variadic arguments" {
+@test "test task clears inherited variadic arguments when none are passed" {
   export usage_args="test/does-not-exist.bats"
 
-  run codebase test test/test-task/fixtures/sample.bats
+  run codebase test --filter "resolve_target: absolute path passes through unchanged"
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"1..2"* ]]
+  [[ "$output" == *"1..1"* ]]
+  [[ "$output" == *"resolve_target: absolute path passes through unchanged"* ]]
 }
