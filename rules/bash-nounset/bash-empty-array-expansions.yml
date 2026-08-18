@@ -1,0 +1,8 @@
+id: bash-empty-array-expansions-candidate
+language: Bash
+severity: hint
+message: named array expansion
+rule:
+  all:
+    - kind: expansion
+    - regex: '^\$\{[A-Za-z_][A-Za-z0-9_]*\[[@*]\]\}$'

@@ -1,0 +1,8 @@
+id: bash-empty-argv-forwarding-candidate
+language: Bash
+severity: hint
+message: braced positional expansion
+rule:
+  all:
+    - kind: expansion
+    - regex: '^\$\{@\}$'
