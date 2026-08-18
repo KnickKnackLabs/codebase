@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Flag Bash 3.2-incompatible empty-array expansion under nounset"
+#USAGE arg "<targets>" var=#true help="Paths to codebases to check (one or more)"
+#USAGE example "codebase lint:bash-empty-array-expansions ." header="Check one repository"
+#USAGE example "codebase lint:bash-empty-array-expansions repo-a repo-b" header="Check several repositories"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/bash-nounset-expansions.sh
+source "$MISE_CONFIG_ROOT/lib/bash-nounset-expansions.sh"
+
+bash_nounset_lint bash-empty-array-expansions "${usage_targets:-}"

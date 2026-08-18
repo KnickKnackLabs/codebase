@@ -1,0 +1,8 @@
+id: bash-nounset-enabled
+language: Bash
+severity: hint
+message: command enables nounset
+rule:
+  all:
+    - kind: command
+    - regex: '^set([[:space:]]+([+-][A-Za-z]+|[+-]o[[:space:]]+[^[:space:]]+))*[[:space:]]+(-[A-Za-z]*u[A-Za-z]*|-o[[:space:]]+nounset)([[:space:]]|$)'
