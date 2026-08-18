@@ -128,10 +128,13 @@ for target in "${TARGETS[@]}"; do
 
   # --- cheap text signals (ripgrep) ---
 
-  # Required: variadic arg spec (either `var=true` or `var=#true`, either
-  # order of `var=` / `help=`).
-  if ! rg -q '^#USAGE arg .*var=#?true' "$task"; then
-    issues+=("missing #USAGE arg spec — expected: #USAGE arg \"[args]\" default=\"\" var=#true help=\"…\"")
+  # Required: the canonical variadic arg spec. Match each required token on
+  # the same directive while allowing help text and token order to vary.
+  if ! awk '
+    /^#USAGE arg / && /"\[args\]"/ && /default=""/ && /var=#true/ { found=1 }
+    END { exit found ? 0 : 1 }
+  ' "$task"; then
+    issues+=("missing canonical #USAGE arg spec — expected: #USAGE arg \"[args]\" default=\"\" var=#true help=\"…\"")
   fi
 
   # Required: at least one example so invocation is discoverable via --help.
