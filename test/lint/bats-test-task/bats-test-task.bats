@@ -41,7 +41,14 @@ setup() {
   run codebase lint:bats-test-task "$FIXTURES/missing-usage-arg"
   [ "$status" -ne 0 ]
   [[ "$output" == *"FAIL"*"missing-usage-arg"* ]]
-  [[ "$output" == *"missing #USAGE arg spec"* ]]
+  [[ "$output" == *"missing canonical #USAGE arg spec"* ]]
+}
+
+@test "bats-test-task: flags the obsolete variadic declaration without a default" {
+  run codebase lint:bats-test-task "$FIXTURES/legacy-usage"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"FAIL"*"legacy-usage"* ]]
+  [[ "$output" == *'"[args]" default="" var=#true'* ]]
 }
 
 @test "bats-test-task: flags missing USAGE examples" {
