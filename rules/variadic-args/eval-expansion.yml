@@ -20,7 +20,7 @@ rule:
           - not:
               has:
                 kind: file_redirect
-                stopBy: end
+                stopBy: neighbor
           - not:
               inside:
                 kind: redirected_statement

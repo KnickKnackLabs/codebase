@@ -99,6 +99,19 @@ BASH
   [ "$status" -eq 0 ]
 }
 
+@test "does not let a nested redirect hide a direct eval argument" {
+  write_task <<'BASH'
+#!/usr/bin/env bash
+#USAGE arg "[args]" default="" var=#true
+eval "$usage_args" "$(cat <input)"
+BASH
+
+  run codebase lint:variadic-args "$FIXTURE"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'eval "$usage_args"'* ]]
+}
+
 @test "scans a nested static eval as its own consumer" {
   write_task <<'BASH'
 #!/usr/bin/env bash
