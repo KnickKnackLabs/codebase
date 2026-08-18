@@ -149,6 +149,36 @@ BASH
   [ "$status" -eq 0 ]
 }
 
+@test "reports ast-grep read parser failures instead of a clean result" {
+  local mock_bin="$BATS_TEST_TMPDIR/mock-bin"
+  export REAL_AST_GREP
+  REAL_AST_GREP="$(command -v ast-grep)"
+  mkdir -p "$mock_bin"
+  cat > "$mock_bin/ast-grep" <<'BASH'
+#!/usr/bin/env bash
+if [[ "${1:-}" == run ]]; then
+  echo 'injected ast-grep run failure' >&2
+  exit 42
+fi
+exec "$REAL_AST_GREP" "$@"
+BASH
+  chmod +x "$mock_bin/ast-grep"
+  PATH="$mock_bin:$PATH"
+
+  write_task <<'BASH'
+#!/usr/bin/env bash
+#USAGE arg "[names]" default="" var=#true
+read -ra NAMES <<< "$usage_names"
+BASH
+
+  run codebase lint:variadic-args "$FIXTURE"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"ast-grep could not parse a read command"* ]]
+  [[ "$output" == *"injected ast-grep run failure"* ]]
+  [[ "$output" != *"OK    repo"* ]]
+}
+
 @test "requires the final here-string payload to be exactly the declaration" {
   write_task <<'BASH'
 #!/usr/bin/env bash
