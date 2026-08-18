@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Check shiv tool declarations have their required Mise backend setup"
+#USAGE arg "<targets>" var=#true help="Paths to codebases to check (one or more)"
+#USAGE example "codebase lint:mise-shiv-plugin ." header="Check one repository"
+#USAGE example "codebase lint:mise-shiv-plugin repo-a repo-b" header="Check several repositories"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/mise-shiv-plugin.sh
+source "$MISE_CONFIG_ROOT/lib/mise-shiv-plugin.sh"
+
+mise_shiv_plugin_lint "${usage_targets:-}"
