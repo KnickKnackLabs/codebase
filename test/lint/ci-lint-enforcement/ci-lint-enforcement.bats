@@ -30,7 +30,10 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - run: if true; then codebase lint "$PWD"; fi
+      - name: Run codebase lints
+        env:
+          EXAMPLE: value
+        run: if true; then codebase lint "$PWD"; fi
 YAML
 
   run codebase lint:ci-lint-enforcement "$REPO"
@@ -56,7 +59,7 @@ YAML
   [ "$status" -eq 0 ]
 }
 
-@test "decodes quoted YAML run scalars" {
+@test "decodes valid YAML run scalar forms" {
   write_workflow <<'YAML'
 name: Test
 jobs:
@@ -64,7 +67,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: 'mise exec -- codebase lint .'
-      - run: "codebase lint \"$PWD\""
+      - run: "printf '\\e[31mred\\e[0m\\n'"
+      - run: 'printf first
+          && printf second'
+YAML
+
+  run codebase lint:ci-lint-enforcement "$REPO"
+
+  [ "$status" -eq 0 ]
+}
+
+@test "ignores run values that explicitly select a non-Bash interpreter" {
+  write_workflow <<'YAML'
+name: Test
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: python {0}
+        run: |
+          def main():
+              print("not Bash")
+      - name: Enforce configured lints
+        run: codebase lint .
 YAML
 
   run codebase lint:ci-lint-enforcement "$REPO"
