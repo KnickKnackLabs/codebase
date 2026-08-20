@@ -1,4 +1,0 @@
-id: github-workflow-yaml-errors
-language: Yaml
-rule:
-  kind: ERROR

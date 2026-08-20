@@ -33,94 +33,6 @@ ci_lint_enforcement_workflows() {
   done | LC_ALL=C sort
 }
 
-ci_lint_enforcement_decode_block() {
-  local raw="$1"
-  local indicator body
-
-  indicator=${raw%%$'\n'*}
-  [[ "$raw" != "$indicator" ]] || {
-    printf 'ERROR: YAML block scalar has no body\n' >&2
-    return 1
-  }
-  [[ "$indicator" =~ ^[\|\>][1-9]?[+-]?$ || "$indicator" =~ ^[\|\>][+-][1-9]$ ]] || {
-    printf 'ERROR: unsupported YAML block scalar indicator: %s\n' "$indicator" >&2
-    return 1
-  }
-  body=${raw#*$'\n'}
-
-  printf '%s\n' "$body" | awk -v style="${indicator:0:1}" '
-    {
-      lines[NR] = $0
-      if ($0 ~ /[^ ]/) {
-        match($0, /[^ ]/)
-        indent = RSTART - 1
-        if (!have_indent || indent < minimum) minimum = indent
-        have_indent = 1
-      }
-    }
-    END {
-      if (!have_indent) exit
-      previous = ""
-      for (i = 1; i <= NR; i++) {
-        line = substr(lines[i], minimum + 1)
-        if (style == "|") {
-          print line
-        } else if (i == 1) {
-          printf "%s", line
-        } else if (previous == "" || line == "") {
-          printf "\n%s", line
-        } else {
-          printf " %s", line
-        }
-        previous = line
-      }
-      if (style == ">") printf "\n"
-    }
-  '
-}
-
-ci_lint_enforcement_decode_run() {
-  local encoded="$1"
-  local raw
-
-  if ! raw=$(printf '%s\n' "$encoded" | jq -r '.'); then
-    printf 'ERROR: could not decode extracted YAML scalar\n' >&2
-    return 1
-  fi
-
-  case "$raw" in
-    \|*|\>*)
-      ci_lint_enforcement_decode_block "$raw"
-      ;;
-    \"*)
-      [[ "$raw" == *\" ]] || {
-        printf 'ERROR: unterminated double-quoted YAML run value\n' >&2
-        return 1
-      }
-      if ! printf '%s\n' "$raw" | jq -r '.'; then
-        printf 'ERROR: unsupported double-quoted YAML run value\n' >&2
-        return 1
-      fi
-      ;;
-    \'*)
-      [[ "$raw" == *\' && "$raw" != *$'\n'* ]] || {
-        printf 'ERROR: unsupported single-quoted YAML run value\n' >&2
-        return 1
-      }
-      raw=${raw#\'}
-      raw=${raw%\'}
-      printf '%s\n' "${raw//\'\'/\'}"
-      ;;
-    *)
-      [[ "$raw" != *$'\n'* ]] || {
-        printf 'ERROR: unsupported multiline plain YAML run value\n' >&2
-        return 1
-      }
-      printf '%s\n' "$raw"
-      ;;
-  esac
-}
-
 ci_lint_enforcement_normalize_expressions() {
   local run="$1"
   local normalized prefix remainder
@@ -181,41 +93,39 @@ ci_lint_enforcement_run_has_aggregate() {
 
 ci_lint_enforcement_workflow_has_aggregate() {
   local workflow="$1"
-  local syntax_errors ast_output encoded_values encoded run status
+  local steps step shell run status
   local found=1
 
-  if ! syntax_errors=$(ast-grep scan \
-    --rule "$_CODEBASE_CI_LINT_RULE_DIR/yaml-errors.yml" \
-    --json=stream "$workflow" 2>&1); then
-    printf 'ERROR: ast-grep could not inspect YAML syntax in %s\n' "$workflow" >&2
-    printf '%s\n' "$syntax_errors" >&2
-    return 2
-  fi
-  if [[ -n "$syntax_errors" ]]; then
+  if ! steps=$(yq eval --output-format=json --indent=0 '
+    .jobs // {} |
+    .[] |
+    select(tag == "!!map") |
+    .steps // [] |
+    .[] |
+    select(tag == "!!map" and has("run")) |
+    {"shell": (.shell // ""), "run": .run}
+  ' "$workflow" 2>&1); then
     printf 'ERROR: workflow is not parseable YAML: %s\n' "$workflow" >&2
+    printf '%s\n' "$steps" >&2
     return 2
   fi
 
-  if ! ast_output=$(ast-grep scan \
-    --rule "$_CODEBASE_CI_LINT_RULE_DIR/run-values.yml" \
-    --json=stream "$workflow" 2>&1); then
-    printf 'ERROR: ast-grep could not extract workflow run values from %s\n' "$workflow" >&2
-    printf '%s\n' "$ast_output" >&2
-    return 2
-  fi
-  if ! encoded_values=$(printf '%s\n' "$ast_output" |
-    jq -c '.metaVariables.single.RUN.text' 2>&1); then
-    printf 'ERROR: could not parse extracted workflow run values from %s\n' "$workflow" >&2
-    printf '%s\n' "$encoded_values" >&2
-    return 2
-  fi
-
-  while IFS= read -r encoded; do
-    [[ -n "$encoded" ]] || continue
-    if ! run=$(ci_lint_enforcement_decode_run "$encoded"); then
-      printf 'ERROR: could not decode workflow run value in %s\n' "$workflow" >&2
+  while IFS= read -r step; do
+    [[ -n "$step" ]] || continue
+    if ! shell=$(printf '%s\n' "$step" | jq -er '.shell | select(type == "string")') ||
+      ! run=$(printf '%s\n' "$step" | jq -er '.run | select(type == "string")'); then
+      printf 'ERROR: workflow run step does not contain string shell and run values in %s\n' \
+        "$workflow" >&2
       return 2
     fi
+
+    # ast-grep parses Bash. Ignore steps that explicitly select another
+    # interpreter rather than rejecting otherwise valid workflow syntax.
+    case "$shell" in
+      ""|bash|bash\ *|sh|sh\ *) ;;
+      *) continue ;;
+    esac
+
     if ci_lint_enforcement_run_has_aggregate "$run"; then
       found=0
     else
@@ -225,7 +135,7 @@ ci_lint_enforcement_workflow_has_aggregate() {
         return "$status"
       }
     fi
-  done <<< "$encoded_values"
+  done <<< "$steps"
 
   return "$found"
 }
