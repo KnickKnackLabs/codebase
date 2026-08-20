@@ -1,0 +1,4 @@
+id: github-workflow-run-bash-errors
+language: Bash
+rule:
+  kind: ERROR
