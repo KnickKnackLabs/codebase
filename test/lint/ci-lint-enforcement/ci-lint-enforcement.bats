@@ -105,6 +105,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo "${{ github.ref }}"
+      - run: echo ${{ format('value }} {0}', github.ref) }}
       - run: codebase lint "${{ github.workspace }}"
 YAML
 
@@ -121,6 +122,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: ${{ 'codebase lint .' }}
+      - run: echo ${{ format('codebase lint . }} {0}', github.ref) }}
 YAML
 
   run codebase lint:ci-lint-enforcement "$REPO"

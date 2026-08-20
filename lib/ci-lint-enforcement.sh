@@ -35,7 +35,8 @@ ci_lint_enforcement_workflows() {
 
 ci_lint_enforcement_normalize_expressions() {
   local run="$1"
-  local normalized prefix remainder
+  local normalized prefix remainder char next
+  local index in_string expression_closed
 
   # GitHub expands these expressions before handing `run` to the shell. Replace
   # their opaque contents so Bash parsing remains structural and an expression
@@ -45,11 +46,37 @@ ci_lint_enforcement_normalize_expressions() {
   while [[ "$normalized" == *'${{'* ]]; do
     prefix=${normalized%%'${{'*}
     remainder=${normalized#*'${{'}
-    if [[ "$remainder" != *'}}'* ]]; then
+    index=0
+    in_string=0
+    expression_closed=0
+
+    # GitHub expression strings use single quotes and escape a quote by
+    # doubling it. A `}}` inside such a string is data, not the delimiter.
+    while [[ "$index" -lt "${#remainder}" ]]; do
+      char=${remainder:index:1}
+      next=${remainder:index+1:1}
+      if [[ "$in_string" -eq 1 ]]; then
+        if [[ "$char" == "'" ]]; then
+          if [[ "$next" == "'" ]]; then
+            index=$((index + 2))
+            continue
+          fi
+          in_string=0
+        fi
+      elif [[ "$char" == "'" ]]; then
+        in_string=1
+      elif [[ "$char$next" == '}}' ]]; then
+        normalized="${prefix}__GITHUB_EXPRESSION__${remainder:index+2}"
+        expression_closed=1
+        break
+      fi
+      index=$((index + 1))
+    done
+
+    if [[ "$expression_closed" -eq 0 ]]; then
       printf '%s\n' 'ERROR: unterminated GitHub expression in workflow run value' >&2
       return 1
     fi
-    normalized="${prefix}__GITHUB_EXPRESSION__${remainder#*'}}'}"
   done
   printf '%s\n' "$normalized"
 }
