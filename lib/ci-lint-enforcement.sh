@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Require repositories with a configured lint portfolio to expose one direct
-# aggregate `codebase lint` command in a normal GitHub Actions workflow step.
+# Require repositories with a configured lint portfolio to expose one direct,
+# failure-propagating aggregate `codebase lint` GitHub Actions workflow step.
 #
-# This is intentionally structural rather than a shell dataflow analyzer. It
-# recognizes direct `codebase lint` and `mise exec -- codebase lint` command
-# syntax in jobs.*.steps[*].run values. It does not trace local tasks, prove
-# conditional reachability, or interpret hard-coded per-rule loops.
+# This is intentionally structural rather than a workflow reachability or shell
+# dataflow analyzer. It recognizes a whole run value containing only direct
+# `codebase lint` or `mise exec -- codebase lint` command syntax. It does not
+# trace local tasks, prove workflow reachability, or interpret per-rule loops.
 
 _CODEBASE_CI_LINT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _CODEBASE_CI_LINT_RULE_DIR="$_CODEBASE_CI_LINT_LIB_DIR/../rules/ci-lint-enforcement"
@@ -101,11 +101,18 @@ ci_lint_enforcement_run_has_aggregate() {
     return 2
   fi
 
+  # A descendant match only proves that the spelling appears somewhere. Require
+  # the match to cover the whole parsed run value so `|| true`, conditionals,
+  # functions, and surrounding commands cannot suppress or replace its status.
   # shellcheck disable=SC2016 # ast-grep metavariable syntax is literal.
   for pattern in 'codebase lint $$$ARGS' 'mise exec -- codebase lint $$$ARGS'; do
     if output=$(printf '%s\n' "$normalized" | ast-grep run \
       --lang bash --pattern "$pattern" --json=compact --stdin 2>&1); then
-      return 0
+      if printf '%s\n' "$output" | jq -e \
+        'any(.[]; .charCount.leading == 0 and .charCount.trailing == 0)' \
+        >/dev/null; then
+        return 0
+      fi
     else
       status=$?
       if [[ "$status" -ne 1 || "$output" != '[]' ]]; then
@@ -124,13 +131,20 @@ ci_lint_enforcement_workflow_has_aggregate() {
   local found=1
 
   if ! steps=$(yq eval --output-format=json --indent=0 '
-    .jobs // {} |
+    . as $workflow |
+    ($workflow.defaults.run.shell // "") as $workflow_shell |
+    (.jobs // {}) |
     .[] |
-    select(tag == "!!map") |
-    .steps // [] |
-    .[] |
+    select(tag == "!!map" and has("steps")) |
+    . as $job |
+    .steps[] |
     select(tag == "!!map" and has("run")) |
-    {"shell": (.shell // ""), "run": .run}
+    {
+      "shell": (.shell // $job.defaults.run.shell // $workflow_shell),
+      "run": .run,
+      "continueOnError": (."continue-on-error" // false),
+      "jobContinueOnError": ($job."continue-on-error" // false)
+    }
   ' "$workflow" 2>&1); then
     printf 'ERROR: workflow is not parseable YAML: %s\n' "$workflow" >&2
     printf '%s\n' "$steps" >&2
@@ -146,12 +160,18 @@ ci_lint_enforcement_workflow_has_aggregate() {
       return 2
     fi
 
-    # ast-grep parses Bash. Ignore steps that explicitly select another
-    # interpreter rather than rejecting otherwise valid workflow syntax.
+    # ast-grep parses Bash. Ignore steps whose effective workflow, job, or step
+    # shell selects another interpreter rather than parsing them as Bash.
     case "$shell" in
       ""|bash|bash\ *|sh|sh\ *) ;;
       *) continue ;;
     esac
+
+    # A direct command cannot enforce failure when the step or its job is
+    # allowed to fail. Dynamic expressions cannot prove the required false value.
+    printf '%s\n' "$step" | jq -e \
+      '.continueOnError == false and .jobContinueOnError == false' \
+      >/dev/null || continue
 
     if ci_lint_enforcement_run_has_aggregate "$run"; then
       found=0
@@ -214,12 +234,13 @@ ci_lint_enforcement_lint() {
     done
 
     if [[ "$enforcement_count" -gt 0 ]]; then
-      printf 'OK    %s (%s configured rule(s), directly enforced in %s workflow(s))\n' \
+      printf 'OK    %s (%s configured rule(s), direct aggregate declaration in %s workflow(s))\n' \
         "$name" "$rule_count" "$enforcement_count"
     else
-      printf 'FAIL  %s: configured codebase lints are not directly enforced in GitHub Actions\n' "$name"
+      printf 'FAIL  %s: no direct failure-propagating `codebase lint` declaration in GitHub Actions\n' \
+        "$name"
       # shellcheck disable=SC2016 # User guidance intentionally shows a literal command.
-      printf '%s\n' '  hint: add a workflow step whose run value directly calls `codebase lint`.'
+      printf '%s\n' '  hint: add a run step containing only `codebase lint` (or `mise exec -- codebase lint`).'
       failures=$((failures + 1))
     fi
   done

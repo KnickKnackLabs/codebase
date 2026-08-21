@@ -33,13 +33,13 @@ jobs:
       - name: Run codebase lints
         env:
           EXAMPLE: value
-        run: if true; then codebase lint "$PWD"; fi
+        run: codebase lint "$PWD"
 YAML
 
   run codebase lint:ci-lint-enforcement "$REPO"
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"OK    fixture (2 configured rule(s), directly enforced in 1 workflow(s))"* ]]
+  [[ "$output" == *"OK    fixture (2 configured rule(s), direct aggregate declaration in 1 workflow(s))"* ]]
 }
 
 @test "accepts mise exec aggregate syntax in a folded run value" {
@@ -114,6 +114,77 @@ YAML
   [ "$status" -eq 0 ]
 }
 
+@test "rejects masked conditional and surrounding aggregate commands" {
+  local run_value
+
+  for run_value in \
+    'codebase lint . || true' \
+    'if true; then codebase lint .; fi' \
+    'codebase lint .; printf done' \
+    'check() { codebase lint .; }; check'; do
+    cat > "$WORKFLOW" <<YAML
+name: Test
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - run: $run_value
+YAML
+
+    run codebase lint:ci-lint-enforcement "$REPO"
+
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"no direct failure-propagating"* ]]
+  done
+}
+
+@test "rejects aggregate steps and jobs allowed to fail" {
+  write_workflow <<'YAML'
+name: Test
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - continue-on-error: true
+        run: codebase lint .
+  allowed-job:
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+      - run: codebase lint .
+YAML
+
+  run codebase lint:ci-lint-enforcement "$REPO"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no direct failure-propagating"* ]]
+}
+
+@test "honors workflow and job default shells" {
+  write_workflow <<'YAML'
+name: Test
+defaults:
+  run:
+    shell: python
+jobs:
+  inherited-python:
+    runs-on: ubuntu-latest
+    steps:
+      - run: codebase lint .
+  inherited-bash:
+    defaults:
+      run:
+        shell: bash
+    runs-on: ubuntu-latest
+    steps:
+      - run: codebase lint .
+YAML
+
+  run codebase lint:ci-lint-enforcement "$REPO"
+
+  [ "$status" -eq 0 ]
+}
+
 @test "does not accept a command spelled inside a GitHub expression" {
   write_workflow <<'YAML'
 name: Test
@@ -148,7 +219,7 @@ TOML
   run codebase lint:ci-lint-enforcement "$REPO"
 
   [ "$status" -eq 1 ]
-  [[ "$output" == *"configured codebase lints are not directly enforced"* ]]
+  [[ "$output" == *"no direct failure-propagating"* ]]
 }
 
 @test "does not trace local tasks or accept per-rule loops" {
@@ -207,6 +278,23 @@ YAML
   run codebase lint:ci-lint-enforcement "$REPO"
 
   [ "$status" -eq 1 ]
+}
+
+@test "ignores reusable-workflow jobs without steps" {
+  write_workflow <<'YAML'
+name: Test
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - run: codebase lint .
+  reusable:
+    uses: example/example/.github/workflows/test.yml@main
+YAML
+
+  run codebase lint:ci-lint-enforcement "$REPO"
+
+  [ "$status" -eq 0 ]
 }
 
 @test "fails closed on malformed workflow YAML" {

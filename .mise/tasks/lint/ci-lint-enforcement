@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Require configured codebase lints to run directly in GitHub Actions"
+#MISE description="Require a direct failure-propagating aggregate lint step in GitHub Actions"
 #USAGE arg "<targets>" var=#true help="Paths to codebases to check (one or more)"
 #USAGE example "codebase lint:ci-lint-enforcement ." header="Check one repository"
 #USAGE example "codebase lint:ci-lint-enforcement repo-a repo-b" header="Check several repositories"
