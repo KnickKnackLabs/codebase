@@ -106,12 +106,28 @@ jobs:
     steps:
       - run: echo "${{ github.ref }}"
       - run: echo ${{ format('value }} {0}', github.ref) }}
-      - run: codebase lint "${{ github.workspace }}"
+      - run: codebase lint .
 YAML
 
   run codebase lint:ci-lint-enforcement "$REPO"
 
   [ "$status" -eq 0 ]
+}
+
+@test "rejects expression interpolation that can mask aggregate failure" {
+  write_workflow <<'YAML'
+name: Test
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - run: codebase lint . ${{ '|| true' }}
+YAML
+
+  run codebase lint:ci-lint-enforcement "$REPO"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no direct failure-propagating"* ]]
 }
 
 @test "rejects masked conditional and surrounding aggregate commands" {
