@@ -146,6 +146,22 @@ BASH
   [[ "$output" == *"public task render"* ]]
 }
 
+@test "does not treat directive-looking body text as an ignore" {
+  write_task render <<'BASH'
+#!/usr/bin/env bash
+#MISE description="Render text"
+#USAGE arg "<target>"
+cat <<'TEXT'
+# codebase:ignore mise-usage-examples -- this is rendered output, not task metadata
+TEXT
+BASH
+
+  run codebase lint:mise-usage-examples "$REPO"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"public task render"* ]]
+}
+
 @test "honors a reasoned inline rule ignore" {
   write_task legacy <<'BASH'
 #!/usr/bin/env bash
