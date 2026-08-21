@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Require examples for public Mise tasks with arguments or flags"
+#USAGE arg "<targets>" var=#true help="Paths to codebases to check (one or more)"
+#USAGE example "codebase lint:mise-usage-examples ." header="Check one repository"
+#USAGE example "codebase lint:mise-usage-examples repo-a repo-b" header="Check several repositories"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/mise-usage-examples.sh
+source "$MISE_CONFIG_ROOT/lib/mise-usage-examples.sh"
+
+mise_usage_examples_lint "${usage_targets:-}"

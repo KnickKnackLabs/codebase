@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Detect manual table formatting that should use gum table"
 #USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+#USAGE example "codebase lint:gum-table ." header="Check one repository"
 
 set -euo pipefail
 

@@ -4,6 +4,7 @@
 #USAGE flag "-p --pattern <pattern>" required=#true help="ast-grep pattern to search for"
 #USAGE flag "-l --lang <lang>" help="Language (default: bash)"
 #USAGE flag "-e --exclude <excludes>" help="Glob patterns to exclude (space-separated)"
+#USAGE example "codebase scan . --pattern 'echo $A' --lang bash" header="Scan Bash files in one repository"
 
 set -euo pipefail
 
