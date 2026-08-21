@@ -89,6 +89,11 @@ ci_lint_enforcement_run_has_aggregate() {
     return 2
   fi
 
+  # GitHub substitutes expressions as unescaped text before invoking the shell.
+  # An expression can therefore inject control flow that masks the command's
+  # status, even when the expression appears inside shell quotes.
+  [[ "$normalized" == "$run" ]] || return 1
+
   if ! errors=$(printf '%s\n' "$normalized" | ast-grep scan \
     --rule "$_CODEBASE_CI_LINT_RULE_DIR/bash-errors.yml" \
     --json=stream --stdin 2>&1); then
