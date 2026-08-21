@@ -160,10 +160,11 @@ ci_lint_enforcement_workflow_has_aggregate() {
       return 2
     fi
 
-    # ast-grep parses Bash. Ignore steps whose effective workflow, job, or step
-    # shell selects another interpreter rather than parsing them as Bash.
+    # ast-grep parses Bash. Accept only GitHub's built-in Bash/sh selectors.
+    # A custom template beginning with `bash ` can ignore the generated script
+    # or mask its status, so it cannot prove failure propagation.
     case "$shell" in
-      ""|bash|bash\ *|sh|sh\ *) ;;
+      ""|bash|sh) ;;
       *) continue ;;
     esac
 

@@ -185,6 +185,23 @@ YAML
   [ "$status" -eq 0 ]
 }
 
+@test "rejects custom shell templates that can skip the run script" {
+  write_workflow <<'YAML'
+name: Test
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - shell: bash -c "exit 0" {0}
+        run: codebase lint .
+YAML
+
+  run codebase lint:ci-lint-enforcement "$REPO"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no direct failure-propagating"* ]]
+}
+
 @test "does not accept a command spelled inside a GitHub expression" {
   write_workflow <<'YAML'
 name: Test
