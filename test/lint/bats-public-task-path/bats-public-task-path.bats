@@ -37,7 +37,7 @@ BATS
   run codebase lint:bats-public-task-path "$TARGET"
 
   [ "$status" -eq 1 ]
-  [[ "$output" == *"FAIL  fixture: 4 raw repository Mise dispatch(es)"* ]]
+  [[ "$output" == *"FAIL  fixture repo: 4 raw repository Mise dispatch(es)"* ]]
   [[ "$output" == *"test/example.bats:3: mise run lock"* ]]
   [[ "$output" == *"test/example.bats:6: run mise -C"* ]]
 }
