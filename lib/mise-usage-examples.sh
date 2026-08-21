@@ -95,7 +95,10 @@ mise_usage_examples_check_target() {
     task_name=$(jq -r '.name' <<< "$task_record")
     source=$(jq -r '.source' <<< "$task_record")
     task="$source"
-    state=$(mise_usage_examples_header_state "$task")
+    if ! state=$(mise_usage_examples_header_state "$task"); then
+      printf 'ERROR: could not inspect Mise task source: %s\n' "$task" >&2
+      return 1
+    fi
     read -r has_interface has_example has_ignore <<< "$state"
 
     [[ "$has_interface" == "1" ]] || continue
