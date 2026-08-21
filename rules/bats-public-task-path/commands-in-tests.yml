@@ -1,0 +1,11 @@
+id: bats-public-task-path-command
+language: Bash
+severity: hint
+message: command inside a BATS test body
+rule:
+  kind: command
+  inside:
+    stopBy: end
+    all:
+      - kind: function_definition
+      - regex: '^__codebase_bats_test_[0-9]+'

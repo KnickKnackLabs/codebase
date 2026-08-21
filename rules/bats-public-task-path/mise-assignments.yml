@@ -1,0 +1,13 @@
+id: bats-public-task-path-mise-assignment
+language: Bash
+severity: hint
+message: environment assignment before Mise dispatch
+rule:
+  kind: variable_assignment
+  inside:
+    stopBy: end
+    all:
+      - kind: command
+      - has:
+          field: name
+          regex: '^mise$'

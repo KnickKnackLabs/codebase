@@ -1,0 +1,6 @@
+id: bats-public-task-path-nested-command
+language: Bash
+severity: hint
+message: command inside a static shell payload
+rule:
+  kind: command

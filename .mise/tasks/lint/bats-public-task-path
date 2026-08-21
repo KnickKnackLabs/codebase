@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Flag BATS test bodies that bypass the exported tool wrapper with raw repository Mise dispatch"
+#USAGE arg "<targets>" var=#true help="Paths to codebases to check (one or more)"
+#USAGE example "codebase lint:bats-public-task-path ." header="Check one repository"
+#USAGE example "codebase lint:bats-public-task-path repo-a repo-b" header="Check several repositories"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/bats-public-task-path.sh
+source "$MISE_CONFIG_ROOT/lib/bats-public-task-path.sh"
+
+bats_public_task_path_lint "${usage_targets:-}"
