@@ -35,10 +35,13 @@ mise_usage_examples_header_state() {
       if ($0 ~ /^#USAGE[[:space:]]+example([[:space:]]|$)/) {
         has_example = 1
       }
+      if ($0 ~ /^[[:space:]]*#[[:space:]]*codebase:ignore[[:space:]]+mise-usage-examples[[:space:]]+--[[:space:]]+[^[:space:]]/) {
+        has_ignore = 1
+      }
       next
     }
     { exit }
-    END { printf "%d %d\n", has_interface, has_example }
+    END { printf "%d %d %d\n", has_interface, has_example, has_ignore }
   ' "$file"
 }
 
@@ -68,7 +71,7 @@ mise_usage_examples_public_tasks() {
 
 mise_usage_examples_check_target() {
   local target="$1"
-  local name tasks_root task_name task source state has_interface has_example tasks
+  local name tasks_root task_name task source state has_interface has_example has_ignore tasks
   local target_failures=0
 
   name=$(basename "$target")
@@ -92,11 +95,11 @@ mise_usage_examples_check_target() {
     [[ -n "$source" ]] || continue
     task="$source"
     state=$(mise_usage_examples_header_state "$task")
-    read -r has_interface has_example <<< "$state"
+    read -r has_interface has_example has_ignore <<< "$state"
 
     [[ "$has_interface" == "1" ]] || continue
     [[ "$has_example" == "1" ]] && continue
-    mise_usage_examples_ignore_has_reason "$task" && continue
+    [[ "$has_ignore" == "1" ]] && continue
 
     printf 'FAIL  %s  %s: public task %s declares arguments or flags but no #USAGE example\n' \
       "$name" "${task#"$target/"}" "$task_name"
