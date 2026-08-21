@@ -1,0 +1,16 @@
+id: exec-stderr-persistence-candidate
+language: Bash
+severity: hint
+message: redirection-only exec changes the current shell's stderr
+rule:
+  all:
+    - kind: redirected_statement
+    - has:
+        kind: command
+        regex: '^exec$'
+    - has:
+        all:
+          - kind: file_redirect
+          - regex: '^(2[<>]|&>|>&).*$'
+          - not:
+              regex: '^2>&([3-9]|[1-9][0-9]+)$'
