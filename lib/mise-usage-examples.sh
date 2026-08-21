@@ -58,11 +58,10 @@ mise_usage_examples_public_tasks() {
     return 1
   fi
 
-  if ! jq -r --arg prefix "$tasks_root/" '
+  if ! jq -c --arg prefix "$tasks_root/" '
     .[]
     | select(.source | type == "string" and startswith($prefix))
-    | [.name, .source]
-    | @tsv
+    | {name, source}
   ' <<< "$tasks_json"; then
     printf 'ERROR: Mise returned invalid task metadata for %s\n' "$target" >&2
     return 1
@@ -71,7 +70,7 @@ mise_usage_examples_public_tasks() {
 
 mise_usage_examples_check_target() {
   local target="$1"
-  local name tasks_root task_name task source state has_interface has_example has_ignore tasks
+  local name tasks_root task_record task_name task source state has_interface has_example has_ignore tasks
   local target_failures=0
 
   name=$(basename "$target")
@@ -91,8 +90,10 @@ mise_usage_examples_check_target() {
     return 1
   fi
 
-  while IFS=$'\t' read -r task_name source; do
-    [[ -n "$source" ]] || continue
+  while IFS= read -r task_record; do
+    [[ -n "$task_record" ]] || continue
+    task_name=$(jq -r '.name' <<< "$task_record")
+    source=$(jq -r '.source' <<< "$task_record")
     task="$source"
     state=$(mise_usage_examples_header_state "$task")
     read -r has_interface has_example has_ignore <<< "$state"

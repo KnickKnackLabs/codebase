@@ -233,6 +233,21 @@ BASH
   [[ "$output" == *"FAIL  repo with spaces "* ]]
 }
 
+@test "preserves backslashes in task source paths" {
+  write_task 'check\name' <<'BASH'
+#!/usr/bin/env bash
+#MISE description="Check a target"
+#USAGE arg "<target>"
+true
+BASH
+
+  run codebase lint:mise-usage-examples "$REPO"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'.mise/tasks/check\name'* ]]
+  [[ "$output" == *'public task check\name'* ]]
+}
+
 @test "accepts a repository without a file-task directory" {
   rm -rf "$REPO/.mise/tasks"
 
