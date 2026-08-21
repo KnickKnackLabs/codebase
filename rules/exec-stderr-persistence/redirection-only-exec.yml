@@ -6,8 +6,16 @@ rule:
   all:
     - kind: redirected_statement
     - has:
-        kind: command
-        regex: '^exec$'
+        field: body
+        any:
+          - all:
+              - kind: command
+              - regex: '^exec$'
+          - all:
+              - kind: negated_command
+              - has:
+                  kind: command
+                  regex: '^exec$'
     - has:
         all:
           - kind: file_redirect

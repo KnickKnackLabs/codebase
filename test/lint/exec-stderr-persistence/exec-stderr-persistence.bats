@@ -54,9 +54,9 @@ BASH
   run codebase lint:exec-stderr-persistence "$REPO"
 
   [ "$status" -eq 1 ]
-  [[ "$output" == *"FAIL  repo: 2 persistent stderr redirection(s)"* ]]
   [[ "$output" == *"probe:3:"* ]]
   [[ "$output" == *"probe:6:"* ]]
+  [[ "$output" == *"FAIL  repo: 2 persistent stderr redirection(s)"* ]]
 }
 
 @test "accepts process replacement and scoped compound-command stderr" {
