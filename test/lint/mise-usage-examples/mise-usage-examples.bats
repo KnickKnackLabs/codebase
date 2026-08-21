@@ -63,6 +63,21 @@ BASH
   [[ "$output" == *"OK    repo"* ]]
 }
 
+@test "rejects malformed examples without a command" {
+  write_task greet <<'BASH'
+#!/usr/bin/env bash
+#MISE description="Greet someone"
+#USAGE arg "<name>"
+#USAGE example
+true
+BASH
+
+  run codebase lint:mise-usage-examples "$REPO"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"public task greet"* ]]
+}
+
 @test "accepts public tasks without arguments or flags" {
   write_task doctor <<'BASH'
 #!/usr/bin/env bash

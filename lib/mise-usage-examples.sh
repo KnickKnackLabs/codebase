@@ -32,7 +32,7 @@ mise_usage_examples_header_state() {
       if ($0 ~ /^#USAGE[[:space:]]+(arg|flag)([[:space:]]|$)/) {
         has_interface = 1
       }
-      if ($0 ~ /^#USAGE[[:space:]]+example([[:space:]]|$)/) {
+      if ($0 ~ /^#USAGE[[:space:]]+example[[:space:]]+[^[:space:]]/) {
         has_example = 1
       }
       next
