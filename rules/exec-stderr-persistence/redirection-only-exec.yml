@@ -20,5 +20,3 @@ rule:
         all:
           - kind: file_redirect
           - regex: '^(2[<>]|&>|>&).*$'
-          - not:
-              regex: '^2>&([3-9]|[1-9][0-9]+)$'
