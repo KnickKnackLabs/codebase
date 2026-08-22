@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Check shiv caller-cwd environment variable contract"
 #USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
+#USAGE example "codebase lint:caller-pwd-contract ." header="Check one repository"
 
 set -euo pipefail
 

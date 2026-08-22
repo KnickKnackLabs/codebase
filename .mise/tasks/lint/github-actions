@@ -2,6 +2,8 @@
 #MISE description="Lint GitHub Actions workflows and create a KKL default workflow when missing"
 #USAGE arg "<targets>…" help="Paths to codebases to check (one or more)"
 #USAGE flag "--fix" help="Create a default GitHub Actions workflow when missing"
+#USAGE example "codebase lint:github-actions ." header="Check one repository"
+#USAGE example "codebase lint:github-actions . --fix" header="Create a missing workflow"
 
 set -euo pipefail
 

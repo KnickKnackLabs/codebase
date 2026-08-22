@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Run configured codebase convention lints"
 #USAGE arg "[target]" default="." help="Path to the target repository"
+#USAGE example "codebase lint ." header="Run the configured lint portfolio"
 
 set -euo pipefail
 

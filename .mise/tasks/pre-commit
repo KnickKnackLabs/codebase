@@ -2,6 +2,9 @@
 #MISE description="Install or check codebase pre-commit hook"
 #USAGE flag "--revert" help="Remove the codebase pre-commit hook"
 #USAGE flag "--check" help="Check if hook is installed and current (no changes)"
+#USAGE example "codebase pre-commit" header="Install or refresh the hook"
+#USAGE example "codebase pre-commit --check" header="Check without changing the hook"
+#USAGE example "codebase pre-commit --revert" header="Remove the hook"
 
 set -euo pipefail
 
