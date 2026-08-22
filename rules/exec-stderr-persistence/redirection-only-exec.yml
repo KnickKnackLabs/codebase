@@ -29,6 +29,13 @@ rule:
             - kind: process_substitution
             - kind: pipeline
           stopBy: end
+    # tree-sitter-bash places a background heredoc's unnamed `&` in an ERROR
+    # node within the redirect instead of after the redirected statement.
+    - not:
+        has:
+          kind: ERROR
+          regex: '^&$'
+          stopBy: end
     - has:
         field: body
         any:
