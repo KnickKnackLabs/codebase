@@ -35,6 +35,8 @@ write_bats() {
   MODE=test command mise run audit
   command env MODE=test mise run trace
   run command env MODE=test mise run report
+  env MODE=test command mise run not-a-dispatch
+  run env MODE=test command mise run also-not-a-dispatch
   run mise -C "$REPO_DIR" run verify
 }
 BATS
@@ -46,7 +48,8 @@ BATS
   [[ "$output" == *"test/example.bats:3: mise run lock"* ]]
   [[ "$output" == *"test/example.bats:6: command mise run inspect"* ]]
   [[ "$output" == *"test/example.bats:8: MODE=test command mise run audit"* ]]
-  [[ "$output" == *"test/example.bats:11: run mise -C"* ]]
+  [[ "$output" == *"test/example.bats:13: run mise -C"* ]]
+  [[ "$output" != *"not-a-dispatch"* ]]
 }
 
 @test "flags static nested bash payloads that bypass a wrapper" {

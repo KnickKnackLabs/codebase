@@ -82,9 +82,33 @@ bats_public_task_path_strip_mise_assignments() {
   printf '%s\n' "${command:end}" | sed 's/^[[:space:]]*//'
 }
 
+bats_public_task_path_env_preamble_is_valid() {
+  local match="$1"
+  local token needs_value=0
+
+  while IFS= read -r token; do
+    if [[ "$needs_value" -eq 1 ]]; then
+      needs_value=0
+      continue
+    fi
+    if [[ "$token" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
+      continue
+    fi
+    case "$token" in
+      -u|--unset|-C|--chdir|-S|--split-string)
+        needs_value=1
+        ;;
+      -*) ;;
+      *) return 1 ;;
+    esac
+  done < <(printf '%s\n' "$match" | jq -r '.metaVariables.multi.ENV[]?.text')
+
+  [[ "$needs_value" -eq 0 ]]
+}
+
 bats_public_task_path_dispatch_match() {
   local command="$1"
-  local inspect stripped pattern output attempt
+  local inspect stripped pattern output candidate attempt
 
   [[ "$command" == *mise* ]] || return 1
   inspect="$command"
@@ -99,17 +123,18 @@ bats_public_task_path_dispatch_match() {
       'run command mise $$$PRE run $$$ARGS' \
       'run command env $$$ENV mise $$$PRE run $$$ARGS' \
       'env $$$ENV mise $$$PRE run $$$ARGS' \
-      'env $$$ENV command mise $$$PRE run $$$ARGS' \
-      'run env $$$ENV mise $$$PRE run $$$ARGS' \
-      'run env $$$ENV command mise $$$PRE run $$$ARGS'; do
+      'run env $$$ENV mise $$$PRE run $$$ARGS'; do
       output=$(printf '%s\n' "$inspect" | ast-grep run \
         --lang bash --pattern "$pattern" --json=compact --stdin 2>/dev/null) || true
       if printf '%s\n' "$output" | jq -e \
         'any(.[]; .charCount.leading == 0 and .charCount.trailing == 0)' \
         >/dev/null 2>&1; then
-        printf '%s\n' "$output" | jq -c \
-          '[.[] | select(.charCount.leading == 0 and .charCount.trailing == 0)][0]'
-        return 0
+        candidate=$(printf '%s\n' "$output" | jq -c \
+          '[.[] | select(.charCount.leading == 0 and .charCount.trailing == 0)][0]')
+        if bats_public_task_path_env_preamble_is_valid "$candidate"; then
+          printf '%s\n' "$candidate"
+          return 0
+        fi
       fi
     done
 
