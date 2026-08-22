@@ -304,7 +304,7 @@ bats_public_task_path_fixture_payload() {
   dir=$(printf '%s\n' "$match" | jq -r '.metaVariables.single.DIR.text')
   if printf '%s\n' "$match" | jq -e '
     (.metaVariables.multi.PRE // [])
-    | any(.text == "-C" or .text == "--cd" or (.text | startswith("--cd=")))
+    | any((.text | startswith("-C")) or .text == "--cd" or (.text | startswith("--cd=")))
   ' >/dev/null && bats_public_task_path_match_is_raw "$match"; then
     return 1
   fi

@@ -109,13 +109,14 @@ BATS
   run mise -C "${REPO_DIR}/." run test
   run bash -c 'cd "$REPO_DIR" && env -u REPO_DIR mise run test'
   run bash -c 'cd "$fixture" && env -u REPO_DIR mise -C "$REPO_DIR" run test'
+  run bash -c 'cd "$fixture" && env -u REPO_DIR mise -C"$REPO_DIR" run verify'
 }
 BATS
 
   run codebase lint:bats-public-task-path "$TARGET"
 
   [ "$status" -eq 1 ]
-  [[ "$output" == *"6 raw repository Mise dispatch(es)"* ]]
+  [[ "$output" == *"7 raw repository Mise dispatch(es)"* ]]
 }
 
 @test "inspects double-quoted static shell payloads" {
