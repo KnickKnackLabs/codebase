@@ -93,9 +93,13 @@ bats_public_task_path_dispatch_match() {
     # shellcheck disable=SC2016 # ast-grep metavariables are literal.
     for pattern in \
       'mise $$$PRE run $$$ARGS' \
+      'command mise $$$PRE run $$$ARGS' \
       'run mise $$$PRE run $$$ARGS' \
+      'run command mise $$$PRE run $$$ARGS' \
       'env $$$ENV mise $$$PRE run $$$ARGS' \
-      'run env $$$ENV mise $$$PRE run $$$ARGS'; do
+      'env $$$ENV command mise $$$PRE run $$$ARGS' \
+      'run env $$$ENV mise $$$PRE run $$$ARGS' \
+      'run env $$$ENV command mise $$$PRE run $$$ARGS'; do
       output=$(printf '%s\n' "$inspect" | ast-grep run \
         --lang bash --pattern "$pattern" --json=compact --stdin 2>/dev/null) || true
       if printf '%s\n' "$output" | jq -e \
