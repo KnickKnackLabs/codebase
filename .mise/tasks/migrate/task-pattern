@@ -2,6 +2,8 @@
 #MISE description="Migrate mise run calls to _task pattern (or reverse)"
 #USAGE arg "<target>" help="Path to the codebase to migrate"
 #USAGE flag "--reverse" help="Reverse: _task back to mise run"
+#USAGE example "codebase migrate:task-pattern ." header="Replace mise run calls with _task"
+#USAGE example "codebase migrate:task-pattern . --reverse" header="Restore mise run calls"
 
 set -euo pipefail
 
