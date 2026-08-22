@@ -32,6 +32,9 @@ write_bats() {
   run env CALLER_PWD="$PWD" mise run status
   command mise run inspect
   run command mise run doctor
+  MODE=test command mise run audit
+  command env MODE=test mise run trace
+  run command env MODE=test mise run report
   run mise -C "$REPO_DIR" run verify
 }
 BATS
@@ -39,10 +42,11 @@ BATS
   run codebase lint:bats-public-task-path "$TARGET"
 
   [ "$status" -eq 1 ]
-  [[ "$output" == *"FAIL  fixture repo: 6 raw repository Mise dispatch(es)"* ]]
+  [[ "$output" == *"FAIL  fixture repo: 9 raw repository Mise dispatch(es)"* ]]
   [[ "$output" == *"test/example.bats:3: mise run lock"* ]]
   [[ "$output" == *"test/example.bats:6: command mise run inspect"* ]]
-  [[ "$output" == *"test/example.bats:8: run mise -C"* ]]
+  [[ "$output" == *"test/example.bats:8: MODE=test command mise run audit"* ]]
+  [[ "$output" == *"test/example.bats:11: run mise -C"* ]]
 }
 
 @test "flags static nested bash payloads that bypass a wrapper" {
