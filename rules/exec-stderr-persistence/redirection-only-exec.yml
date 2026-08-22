@@ -2,20 +2,33 @@ id: exec-stderr-persistence-candidate
 language: Bash
 severity: hint
 message: redirection-only exec changes the current shell's stderr
+utils:
+  redirection_only_exec:
+    all:
+      - kind: command
+      - any:
+          - all:
+              - kind: command
+              - has:
+                  field: name
+                  regex: '^(exec|\\exec)$'
+              - not:
+                  has:
+                    field: argument
+                    regex: '.'
+          - regex: '^(exec|\\exec)[[:space:]]+--$'
+          - regex: '^command[[:space:]]+(exec|\\exec)([[:space:]]+--)?$'
 rule:
   all:
     - kind: redirected_statement
     - has:
         field: body
         any:
-          - all:
-              - kind: command
-              - regex: '^exec$'
+          - matches: redirection_only_exec
           - all:
               - kind: negated_command
               - has:
-                  kind: command
-                  regex: '^exec$'
+                  matches: redirection_only_exec
     - has:
         all:
           - kind: file_redirect

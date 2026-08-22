@@ -59,6 +59,26 @@ BASH
   [[ "$output" == *"FAIL  repo: 2 persistent stderr redirection(s)"* ]]
 }
 
+@test "reports equivalent redirection-only exec invocation forms" {
+  write_shell "$REPO" probe <<'BASH'
+#!/usr/bin/env bash
+\exec 2>/dev/null
+
+exec -- 2>/dev/null
+
+FOO=bar exec 2>/dev/null
+
+command exec 2>/dev/null
+BASH
+
+  run codebase lint:exec-stderr-persistence "$REPO"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL  repo: 4 persistent stderr redirection(s)"* ]]
+  [[ "$output" == *"probe:2: \\exec 2>/dev/null"* ]]
+  [[ "$output" == *"probe:8: command exec 2>/dev/null"* ]]
+}
+
 @test "accepts process replacement and scoped compound-command stderr" {
   write_shell "$REPO" probe <<'BASH'
 #!/usr/bin/env bash
