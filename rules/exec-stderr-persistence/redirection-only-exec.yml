@@ -5,6 +5,13 @@ message: redirection-only exec changes the current shell's stderr
 rule:
   all:
     - kind: redirected_statement
+    - not:
+        inside:
+          any:
+            - kind: subshell
+            - kind: command_substitution
+            - kind: process_substitution
+          stopBy: end
     - has:
         field: body
         any:

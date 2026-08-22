@@ -59,12 +59,15 @@ BASH
   [[ "$output" == *"FAIL  repo: 2 persistent stderr redirection(s)"* ]]
 }
 
-@test "accepts process replacement and scoped compound-command stderr" {
+@test "accepts process replacement and scoped execution contexts" {
   write_shell "$REPO" probe <<'BASH'
 #!/usr/bin/env bash
 exec child --flag 2>/dev/null
 exec "$child" 2>error.log
 { exec 3<>"$tty"; } 2>/dev/null
+( exec 3<>"$tty" 2>/dev/null )
+value=$(exec 3<>"$tty" 2>/dev/null)
+cat <(exec 3<>"$tty" 2>/dev/null)
 BASH
 
   run codebase lint:exec-stderr-persistence "$REPO"
