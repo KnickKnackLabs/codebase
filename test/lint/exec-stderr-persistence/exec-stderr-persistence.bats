@@ -104,13 +104,28 @@ printf '%s\n' 'exec 2>/dev/null'
 myexec 2>/dev/null
 exec 3<>"$tty"
 exec 1>/dev/null
-exec 2>&3
-exec 2>&10
 BASH
 
   run codebase lint:exec-stderr-persistence "$REPO"
 
   [ "$status" -eq 0 ]
+}
+
+@test "descriptor duplication requires an explicit restoration reason" {
+  write_shell "$REPO" probe <<'BASH'
+#!/usr/bin/env bash
+exec 2>&3
+exec 2>&10
+exec 2>&"$saved_fd" # codebase:ignore exec-stderr-persistence -- restore the saved stderr descriptor
+BASH
+
+  run codebase lint:exec-stderr-persistence "$REPO"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL  repo: 2 persistent stderr redirection(s)"* ]]
+  [[ "$output" == *"probe:2: exec 2>&3"* ]]
+  [[ "$output" == *"probe:3: exec 2>&10"* ]]
+  [[ "$output" != *"saved_fd"* ]]
 }
 
 @test "inline ignores must name the rule and include a reason" {
@@ -134,7 +149,7 @@ BASH
 exec \
   3<>"$tty" \
   2>/dev/null # codebase:ignore exec-stderr-persistence -- restored immediately below
-exec 2>&3
+exec 2>&3 # codebase:ignore exec-stderr-persistence -- restore the saved stderr descriptor
 BASH
 
   run codebase lint:exec-stderr-persistence "$REPO"
