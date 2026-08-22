@@ -137,12 +137,16 @@ BATS
     printf '%s\n' '#!/usr/bin/env bats'
     printf '%s\n' 'dispatch() { # @''test'
     printf '%s\n' '  run mise run test' '}'
+    printf '%s\n' 'function keyword_dispatch { # @''test'
+    printf '%s\n' '  run mise run verify' '}'
   } > "$TARGET/test/example.bats"
 
   run codebase lint:bats-public-task-path "$TARGET"
 
   [ "$status" -eq 1 ]
+  [[ "$output" == *"2 raw repository Mise dispatch(es)"* ]]
   [[ "$output" == *"test/example.bats:3:"* ]]
+  [[ "$output" == *"test/example.bats:6:"* ]]
 }
 
 @test "supports inline and repository-wide ignores" {
