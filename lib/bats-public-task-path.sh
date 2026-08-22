@@ -21,7 +21,7 @@ bats_public_task_path_normalize() {
   local source="$1"
   local line test_count=0
   local test_pattern='^[[:blank:]]*@test[[:blank:]]+(.*[^[:blank:]])[[:blank:]]+\{(.*)$'
-  local comment_pattern='^[[:blank:]]*([^[:blank:]()]+)[[:blank:]]*\(?\)?[[:blank:]]+\{[[:blank:]]+#[[:blank:]]*@test[[:blank:]]*$'
+  local comment_pattern='^[[:blank:]]*(function[[:blank:]]+)?[^[:blank:]()]+[[:blank:]]*\(?\)?[[:blank:]]+\{[[:blank:]]+#[[:blank:]]*@test[[:blank:]]*$'
 
   while IFS= read -r line || [[ -n "$line" ]]; do
     if [[ "$line" =~ $test_pattern ]]; then
