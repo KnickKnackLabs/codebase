@@ -231,7 +231,7 @@ bats_public_task_path_shell_payload() {
 
 bats_public_task_path_fixture_payload() {
   local payload="$1"
-  local pattern output dir
+  local pattern output match dir
 
   # This is the maintained copied-fixture form: select another workspace and
   # scrub the parent test's REPO_DIR before asking Mise to resolve the task.
@@ -245,8 +245,15 @@ bats_public_task_path_fixture_payload() {
     >/dev/null 2>&1; then
     return 1
   fi
-  dir=$(printf '%s\n' "$output" | jq -r \
-    '[.[] | select(.charCount.leading == 0 and .charCount.trailing == 0)][0].metaVariables.single.DIR.text')
+  match=$(printf '%s\n' "$output" | jq -c \
+    '[.[] | select(.charCount.leading == 0 and .charCount.trailing == 0)][0]')
+  dir=$(printf '%s\n' "$match" | jq -r '.metaVariables.single.DIR.text')
+  if printf '%s\n' "$match" | jq -e '
+    (.metaVariables.multi.PRE // [])
+    | any(.text == "-C" or .text == "--cd" or (.text | startswith("--cd=")))
+  ' >/dev/null && bats_public_task_path_match_is_raw "$match"; then
+    return 1
+  fi
   ! bats_public_task_path_is_repo_root_token "$dir"
 }
 
