@@ -42,18 +42,23 @@ BATS
   [[ "$output" == *"test/example.bats:6: run mise -C"* ]]
 }
 
-@test "flags the original nested bash payload that bypasses a wrapper" {
+@test "flags static nested bash payloads that bypass a wrapper" {
   write_bats <<'BATS'
 #!/usr/bin/env bats
 @test "stale caller" {
   run bash -c 'cd "$REPO_DIR" && CALLER_PWD="$1" mise run -q list --json' _ "$stale"
+  MODE=test bash -c 'mise run verify'
+  run bash -lc 'mise run status'
 }
 BATS
 
   run codebase lint:bats-public-task-path "$TARGET"
 
   [ "$status" -eq 1 ]
+  [[ "$output" == *"3 raw repository Mise dispatch(es)"* ]]
   [[ "$output" == *"test/example.bats:3: run bash -c"* ]]
+  [[ "$output" == *"test/example.bats:4: MODE=test bash -c"* ]]
+  [[ "$output" == *"test/example.bats:5: run bash -lc"* ]]
 }
 
 @test "does not flag wrapper definitions or Mise text used as data" {

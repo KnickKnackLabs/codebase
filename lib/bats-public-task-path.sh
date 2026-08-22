@@ -210,30 +210,70 @@ bats_public_task_path_decode_static_word() {
   printf '%s\n' "$result"
 }
 
+bats_public_task_path_strip_shell_assignments() {
+  local command="$1"
+  local scratch_dir scratch matches end
+
+  scratch_dir=$(mktemp -d "${TMPDIR:-/tmp}/codebase-bats-shell-assignment.XXXXXX")
+  scratch="$scratch_dir/command.sh"
+  printf '%s\n' "$command" > "$scratch"
+  if ! matches=$(ast-grep scan \
+    --rule "$_CODEBASE_BATS_PATH_RULE_DIR/shell-assignments.yml" \
+    --json=compact "$scratch" 2>/dev/null); then
+    rm -rf "$scratch_dir"
+    return 1
+  fi
+  rm -rf "$scratch_dir"
+  end=$(printf '%s\n' "$matches" | jq -r \
+    'if length == 0 then 0 else ([.[].range.byteOffset.end] | max) end')
+  [[ "$end" -gt 0 ]] || return 1
+  printf '%s\n' "${command:end}" | sed 's/^[[:space:]]*//'
+}
+
 bats_public_task_path_shell_payload() {
   local command="$1"
-  local pattern output word
+  local inspect stripped pattern output word attempt
 
-  [[ "$command" == *bash* && "$command" == *-c* ]] || return 1
-  # shellcheck disable=SC2016 # ast-grep metavariables are literal.
-  for pattern in \
-    'bash -c $SCRIPT' \
-    'bash -c $SCRIPT $$$REST' \
-    'run bash -c $SCRIPT' \
-    'run bash -c $SCRIPT $$$REST' \
-    'env $$$ENV bash -c $SCRIPT' \
-    'env $$$ENV bash -c $SCRIPT $$$REST' \
-    'run env $$$ENV bash -c $SCRIPT' \
-    'run env $$$ENV bash -c $SCRIPT $$$REST'; do
-    output=$(printf '%s\n' "$command" | ast-grep run \
-      --lang bash --pattern "$pattern" --json=compact --stdin 2>/dev/null) || true
-    if printf '%s\n' "$output" | jq -e \
-      'any(.[]; .charCount.leading == 0 and .charCount.trailing == 0)' \
-      >/dev/null 2>&1; then
-      word=$(printf '%s\n' "$output" | jq -r \
-        '[.[] | select(.charCount.leading == 0 and .charCount.trailing == 0)][0].metaVariables.single.SCRIPT.text')
-      bats_public_task_path_decode_static_word "$word"
-      return $?
+  [[ "$command" == *bash* ]] || return 1
+  [[ "$command" == *-c* || "$command" == *-lc* ]] || return 1
+  inspect="$command"
+
+  for attempt in 1 2; do
+    # shellcheck disable=SC2016 # ast-grep metavariables are literal.
+    for pattern in \
+      'bash -c $SCRIPT' \
+      'bash -c $SCRIPT $$$REST' \
+      'bash -lc $SCRIPT' \
+      'bash -lc $SCRIPT $$$REST' \
+      'run bash -c $SCRIPT' \
+      'run bash -c $SCRIPT $$$REST' \
+      'run bash -lc $SCRIPT' \
+      'run bash -lc $SCRIPT $$$REST' \
+      'env $$$ENV bash -c $SCRIPT' \
+      'env $$$ENV bash -c $SCRIPT $$$REST' \
+      'env $$$ENV bash -lc $SCRIPT' \
+      'env $$$ENV bash -lc $SCRIPT $$$REST' \
+      'run env $$$ENV bash -c $SCRIPT' \
+      'run env $$$ENV bash -c $SCRIPT $$$REST' \
+      'run env $$$ENV bash -lc $SCRIPT' \
+      'run env $$$ENV bash -lc $SCRIPT $$$REST'; do
+      output=$(printf '%s\n' "$inspect" | ast-grep run \
+        --lang bash --pattern "$pattern" --json=compact --stdin 2>/dev/null) || true
+      if printf '%s\n' "$output" | jq -e \
+        'any(.[]; .charCount.leading == 0 and .charCount.trailing == 0)' \
+        >/dev/null 2>&1; then
+        word=$(printf '%s\n' "$output" | jq -r \
+          '[.[] | select(.charCount.leading == 0 and .charCount.trailing == 0)][0].metaVariables.single.SCRIPT.text')
+        bats_public_task_path_decode_static_word "$word"
+        return $?
+      fi
+    done
+
+    [[ "$attempt" -eq 1 ]] || break
+    if stripped=$(bats_public_task_path_strip_shell_assignments "$command"); then
+      inspect="$stripped"
+    else
+      break
     fi
   done
   return 1
