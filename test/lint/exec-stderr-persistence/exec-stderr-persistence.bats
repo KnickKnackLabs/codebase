@@ -38,6 +38,23 @@ BASH
   [[ "$output" == *"probe:9: exec >&combined.log"* ]]
 }
 
+@test "reports final pipeline exec that can persist under lastpipe" {
+  write_shell "$REPO" probe <<'BASH'
+#!/usr/bin/env bash
+shopt -s lastpipe
+set +m
+printf 'input\n' | exec 2>/dev/null
+first | middle | FOO=bar exec 2>error.log
+BASH
+
+  run codebase lint:exec-stderr-persistence "$REPO"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL  repo: 2 persistent stderr redirection(s)"* ]]
+  [[ "$output" == *"probe:4: printf 'input\n' | exec 2>/dev/null"* ]]
+  [[ "$output" == *"probe:5: first | middle | FOO=bar exec 2>error.log"* ]]
+}
+
 @test "reports redirection-only exec inside conditionals functions and multiline commands" {
   write_shell "$REPO" probe <<'BASH'
 #!/usr/bin/env bash
@@ -89,7 +106,6 @@ exec "$child" 2>error.log
 value=$(exec 3<>"$tty" 2>/dev/null)
 cat <(exec 3<>"$tty" 2>/dev/null)
 exec 2>/dev/null | cat
-printf 'input\n' | exec 2>/dev/null
 exec 2>/dev/null &
 command exec 2>/dev/null &
 BASH

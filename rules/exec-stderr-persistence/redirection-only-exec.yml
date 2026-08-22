@@ -18,6 +18,16 @@ utils:
                     regex: '.'
           - regex: '^(exec|\\exec)[[:space:]]+--$'
           - regex: '^command[[:space:]]+(exec|\\exec)([[:space:]]+--)?$'
+  pipeline_ending_in_redirection_only_exec:
+    all:
+      - kind: pipeline
+      - has:
+          all:
+            - matches: redirection_only_exec
+            - nthChild:
+                position: 1
+                reverse: true
+          stopBy: end
 rule:
   all:
     - kind: redirected_statement
@@ -33,6 +43,7 @@ rule:
         field: body
         any:
           - matches: redirection_only_exec
+          - matches: pipeline_ending_in_redirection_only_exec
           - all:
               - kind: negated_command
               - has:
