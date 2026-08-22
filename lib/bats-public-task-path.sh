@@ -94,8 +94,10 @@ bats_public_task_path_dispatch_match() {
     for pattern in \
       'mise $$$PRE run $$$ARGS' \
       'command mise $$$PRE run $$$ARGS' \
+      'command env $$$ENV mise $$$PRE run $$$ARGS' \
       'run mise $$$PRE run $$$ARGS' \
       'run command mise $$$PRE run $$$ARGS' \
+      'run command env $$$ENV mise $$$PRE run $$$ARGS' \
       'env $$$ENV mise $$$PRE run $$$ARGS' \
       'env $$$ENV command mise $$$PRE run $$$ARGS' \
       'run env $$$ENV mise $$$PRE run $$$ARGS' \

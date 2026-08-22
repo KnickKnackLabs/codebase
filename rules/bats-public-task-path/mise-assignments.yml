@@ -10,4 +10,4 @@ rule:
       - kind: command
       - has:
           field: name
-          regex: '^mise$'
+          regex: '^(mise|command)$'
