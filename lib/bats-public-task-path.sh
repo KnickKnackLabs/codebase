@@ -123,9 +123,15 @@ bats_public_task_path_is_repo_root_token() {
   # shellcheck disable=SC2016 # Source tokens are compared literally.
   case "$token" in
     .|./|'$REPO_DIR'|'${REPO_DIR}'|'"$REPO_DIR"'|'"${REPO_DIR}"'|\
+      '$REPO_DIR/'|'${REPO_DIR}/'|'$REPO_DIR/.'|'${REPO_DIR}/.'|\
+      '"$REPO_DIR/"'|'"${REPO_DIR}/"'|'"$REPO_DIR/."'|'"${REPO_DIR}/."'|\
+      '"$REPO_DIR"/'|'"${REPO_DIR}"/'|'"$REPO_DIR"/.'|'"${REPO_DIR}"/.'|\
       "'\$REPO_DIR'"|"'\${REPO_DIR}'"|'$MISE_CONFIG_ROOT'|'${MISE_CONFIG_ROOT}'|\
-      '"$MISE_CONFIG_ROOT"'|'"${MISE_CONFIG_ROOT}"'|"'\$MISE_CONFIG_ROOT'"|\
-      "'\${MISE_CONFIG_ROOT}'") return 0 ;;
+      '$MISE_CONFIG_ROOT/'|'${MISE_CONFIG_ROOT}/'|'$MISE_CONFIG_ROOT/.'|'${MISE_CONFIG_ROOT}/.'|\
+      '"$MISE_CONFIG_ROOT"'|'"${MISE_CONFIG_ROOT}"'|'"$MISE_CONFIG_ROOT/"'|\
+      '"${MISE_CONFIG_ROOT}/"'|'"$MISE_CONFIG_ROOT/."'|'"${MISE_CONFIG_ROOT}/."'|\
+      '"$MISE_CONFIG_ROOT"/'|'"${MISE_CONFIG_ROOT}"/'|'"$MISE_CONFIG_ROOT"/.'|\
+      '"${MISE_CONFIG_ROOT}"/.'|"'\$MISE_CONFIG_ROOT'"|"'\${MISE_CONFIG_ROOT}'") return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -148,6 +154,10 @@ bats_public_task_path_match_is_raw() {
         next=$((i + 1))
         [[ "$next" -lt "${#pre[@]}" ]] || return 0
         target=${pre[$next]}
+        break
+        ;;
+      -C?*)
+        target=${token#-C}
         break
         ;;
       --cd=*)
