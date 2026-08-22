@@ -32,9 +32,20 @@ exec_stderr_persistence_range_has_ignore() {
   return 1
 }
 
+exec_stderr_persistence_range_is_async() {
+  local file="$1"
+  local last_line="$2"
+  local end_column="$3"
+  local LC_ALL=C line suffix
+
+  line=$(sed -n "${last_line}p" "$file")
+  suffix="${line:$end_column}"
+  [[ "$suffix" =~ ^[[:space:]]*\&([[:space:]#]|$) ]]
+}
+
 exec_stderr_persistence_scan_file() {
   local file="$1"
-  local ast_output zero_based_start zero_based_end first_line last_line
+  local ast_output zero_based_start zero_based_end end_column first_line last_line
   local line trimmed
 
   if ! ast_output=$(ast-grep scan --stdin --rule "$_CODEBASE_EXEC_STDERR_RULE" --json=stream < "$file" 2>&1); then
@@ -43,10 +54,14 @@ exec_stderr_persistence_scan_file() {
     return 1
   fi
 
-  while IFS=$'\t' read -r zero_based_start zero_based_end; do
+  while IFS=$'\t' read -r zero_based_start zero_based_end end_column; do
     [[ -n "$zero_based_start" ]] || continue
     first_line=$((zero_based_start + 1))
     last_line=$((zero_based_end + 1))
+
+    if exec_stderr_persistence_range_is_async "$file" "$last_line" "$end_column"; then
+      continue
+    fi
 
     if exec_stderr_persistence_range_has_ignore "$file" "$first_line" "$last_line"; then
       continue
@@ -57,7 +72,7 @@ exec_stderr_persistence_scan_file() {
     printf '%s: %s\n' "$first_line" "$trimmed"
   done < <(
     printf '%s\n' "$ast_output" |
-      jq -r '[.range.start.line, .range.end.line] | @tsv'
+      jq -r '[.range.start.line, .range.end.line, .range.end.column] | @tsv'
   )
 }
 

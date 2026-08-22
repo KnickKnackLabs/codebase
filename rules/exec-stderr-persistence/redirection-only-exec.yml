@@ -27,6 +27,7 @@ rule:
             - kind: subshell
             - kind: command_substitution
             - kind: process_substitution
+            - kind: pipeline
           stopBy: end
     - has:
         field: body
