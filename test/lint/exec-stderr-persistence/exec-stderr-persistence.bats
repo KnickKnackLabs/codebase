@@ -100,6 +100,22 @@ BASH
   [[ "$output" == *"OK    repo"* ]]
 }
 
+@test "accepts line-continued and heredoc background commands" {
+  write_shell "$REPO" probe <<'BASH'
+#!/usr/bin/env bash
+exec 2>/dev/null \
+  &
+exec 2>/dev/null <<'EOF' &
+payload
+EOF
+BASH
+
+  run codebase lint:exec-stderr-persistence "$REPO"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK    repo"* ]]
+}
+
 @test "accepts comments strings lookalikes and non-stderr descriptor setup" {
   write_shell "$REPO" probe <<'BASH'
 #!/usr/bin/env bash

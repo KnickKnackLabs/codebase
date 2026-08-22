@@ -40,6 +40,10 @@ exec_stderr_persistence_range_is_async() {
 
   line=$(sed -n "${last_line}p" "$file")
   suffix="${line:$end_column}"
+  while [[ "$suffix" =~ ^[[:blank:]]*\\$ ]]; do
+    last_line=$((last_line + 1))
+    suffix=$(sed -n "${last_line}p" "$file")
+  done
   [[ "$suffix" =~ ^[[:space:]]*\&([[:space:]#]|$) ]]
 }
 
