@@ -1,0 +1,4 @@
+id: bats-public-task-path-bash-errors
+language: Bash
+rule:
+  kind: ERROR
