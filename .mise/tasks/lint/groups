@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#MISE description="List evolving lint groups and their current membership"
+#USAGE example "codebase lint:groups" header="Inspect the groups available to repository configuration"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/lint-groups.sh
+source "$MISE_CONFIG_ROOT/lib/lint-groups.sh"
+
+while IFS= read -r group; do
+  [[ -n "$group" ]] || continue
+  printf '%s\n' "$group"
+  while IFS= read -r rule; do
+    [[ -n "$rule" ]] && printf '  %s\n' "$rule"
+  done < <(codebase_lint_group_members "$group")
+done < <(codebase_available_lint_groups)
+
+cat <<'EOF'
+
+Groups evolve when Codebase adds relevant conventions. Repositories opt into
+that evolution when they upgrade Codebase. Use concrete rule names in
+lint_exclude; group exclusions are not accepted.
+EOF

@@ -20,16 +20,21 @@ if [[ ! -f "$TOML" ]]; then
   exit 1
 fi
 
+if ! RULES_OUTPUT=$(codebase_configured_lint_rules "$REPO_ROOT"); then
+  exit 1
+fi
+
 RULES=()
 while IFS= read -r rule; do
   [[ -n "$rule" ]] && RULES+=("$rule")
-done < <(codebase_configured_lint_rules "$REPO_ROOT")
+done <<< "$RULES_OUTPUT"
 
 if [[ ${#RULES[@]} -eq 0 ]]; then
-  echo "ERROR: no lint rules configured in $TOML" >&2
+  echo "ERROR: no lint rules configured after group expansion and exclusions in $TOML" >&2
   echo "Add to mise.toml:" >&2
   echo '  [_.codebase]' >&2
-  echo '  lint = ["mise-settings", "gum-table"]' >&2
+  echo '  lint = ["@shell", "@mise"]' >&2
+  echo "Run 'codebase lint:groups' to inspect evolving group membership." >&2
   exit 1
 fi
 
