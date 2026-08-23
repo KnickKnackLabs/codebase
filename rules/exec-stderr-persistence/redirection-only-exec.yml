@@ -1,0 +1,61 @@
+id: exec-stderr-persistence-candidate
+language: Bash
+severity: hint
+message: redirection-only exec changes the current shell's stderr
+utils:
+  redirection_only_exec:
+    all:
+      - kind: command
+      - any:
+          - all:
+              - kind: command
+              - has:
+                  field: name
+                  regex: '^(exec|\\exec)$'
+              - not:
+                  has:
+                    field: argument
+                    regex: '.'
+          - regex: '^(exec|\\exec)[[:space:]]+--$'
+          - regex: '^command[[:space:]]+(exec|\\exec)([[:space:]]+--)?$'
+  pipeline_ending_in_redirection_only_exec:
+    all:
+      - kind: pipeline
+      - has:
+          all:
+            - matches: redirection_only_exec
+            - nthChild:
+                position: 1
+                reverse: true
+          stopBy: end
+rule:
+  all:
+    - kind: redirected_statement
+    - not:
+        inside:
+          any:
+            - kind: subshell
+            - kind: command_substitution
+            - kind: process_substitution
+            - kind: pipeline
+          stopBy: end
+    # tree-sitter-bash places a background heredoc's unnamed `&` in an ERROR
+    # node within the redirect instead of after the redirected statement.
+    - not:
+        has:
+          kind: ERROR
+          regex: '^&$'
+          stopBy: end
+    - has:
+        field: body
+        any:
+          - matches: redirection_only_exec
+          - matches: pipeline_ending_in_redirection_only_exec
+          - all:
+              - kind: negated_command
+              - has:
+                  matches: redirection_only_exec
+    - has:
+        all:
+          - kind: file_redirect
+          - regex: '^(2[<>]|&>|>&).*$'

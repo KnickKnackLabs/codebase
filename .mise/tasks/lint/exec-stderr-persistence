@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Flag redirection-only exec commands that persistently redirect stderr"
+#USAGE arg "<targets>" var=#true help="Paths to codebases to check (one or more)"
+#USAGE example "codebase lint:exec-stderr-persistence ." header="Check one repository"
+#USAGE example "codebase lint:exec-stderr-persistence repo-a repo-b" header="Check several repositories"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/exec-stderr-persistence.sh
+source "$MISE_CONFIG_ROOT/lib/exec-stderr-persistence.sh"
+
+exec_stderr_persistence_lint "${usage_targets:-}"
