@@ -8,6 +8,8 @@
 _CODEBASE_CONFIG_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./shell-files.sh
 source "$_CODEBASE_CONFIG_LIB_DIR/shell-files.sh"
+# shellcheck source=./lint-groups.sh
+source "$_CODEBASE_CONFIG_LIB_DIR/lint-groups.sh"
 
 # codebase_git_root <path>
 #
@@ -75,18 +77,19 @@ codebase_name() {
   basename "$repo_root"
 }
 
-# codebase_configured_lint_rules <repo-root>
+# codebase_config_values <repo-root> <key>
 #
-# Emit configured [_.codebase].lint rules, one per line. Rule names are expected
-# to be simple task suffixes such as "mise-settings" or "gum-table".
-codebase_configured_lint_rules() {
+# Emit the string values from one Codebase configuration array, one per line.
+# Mise owns TOML parsing; this helper only splits its normalized array output.
+codebase_config_values() {
   local repo_root="$1"
+  local key="$2"
   local toml="$repo_root/mise.toml"
   local raw
 
   [[ -f "$toml" ]] || return 0
 
-  if ! raw=$(mise config get -f "$toml" _.codebase.lint 2>/dev/null); then
+  if ! raw=$(mise config get -f "$toml" "$key" 2>/dev/null); then
     return 0
   fi
 
@@ -94,6 +97,48 @@ codebase_configured_lint_rules() {
     gsub(/[\[\]",]/, " ")
     for (i = 1; i <= NF; i++) print $i
   }'
+}
+
+# codebase_configured_lint_rules <repo-root>
+#
+# Emit the effective concrete lint portfolio after stable group expansion,
+# first-occurrence deduplication, and concrete exclusions.
+codebase_configured_lint_rules() {
+  local repo_root="$1"
+  local entry expanded rule exclusion
+  local exclusions=' '
+  local -a entries=()
+
+  while IFS= read -r entry; do
+    [[ -n "$entry" ]] && entries+=("$entry")
+  done < <(codebase_config_values "$repo_root" _.codebase.lint)
+
+  [[ ${#entries[@]} -gt 0 ]] || return 0
+
+  while IFS= read -r exclusion; do
+    [[ -n "$exclusion" ]] || continue
+    if [[ "$exclusion" == @* ]]; then
+      printf 'ERROR: lint_exclude accepts concrete lint names, not groups: %s\n' \
+        "$exclusion" >&2
+      return 1
+    fi
+    case "$exclusions" in
+      *" $exclusion "*) ;;
+      *) exclusions="${exclusions}${exclusion} " ;;
+    esac
+  done < <(codebase_config_values "$repo_root" _.codebase.lint_exclude)
+
+  if ! expanded=$(codebase_expand_lint_entries "${entries[@]}"); then
+    return 1
+  fi
+
+  while IFS= read -r rule; do
+    [[ -n "$rule" ]] || continue
+    case "$exclusions" in
+      *" $rule "*) continue ;;
+    esac
+    printf '%s\n' "$rule"
+  done <<< "$expanded"
 }
 
 # codebase_default_scope_for_rule <rule>
