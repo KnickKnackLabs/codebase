@@ -330,6 +330,69 @@ YAML
   [ "$status" -eq 0 ]
 }
 
+@test "accepts a uses-only workflow beside aggregate enforcement" {
+  write_workflow <<'YAML'
+name: Test
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - run: codebase lint .
+YAML
+  cat > "$REPO/.github/workflows/gate.yml" <<'YAML'
+name: Gate
+jobs:
+  reusable:
+    uses: example/example/.github/workflows/gate.yml@main
+  action-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+YAML
+
+  run codebase lint:ci-lint-enforcement "$REPO"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"direct aggregate declaration in 1 workflow(s)"* ]]
+}
+
+@test "reports missing enforcement when every workflow is uses-only" {
+  write_workflow <<'YAML'
+name: Gate
+jobs:
+  reusable:
+    uses: example/example/.github/workflows/gate.yml@main
+  action-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+YAML
+
+  run codebase lint:ci-lint-enforcement "$REPO"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no direct failure-propagating"* ]]
+  [[ "$output" != *"does not contain string shell and run values"* ]]
+}
+
+@test "fails closed on a non-string run value" {
+  write_workflow <<'YAML'
+name: Test
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - run:
+          command: codebase lint .
+YAML
+
+  run codebase lint:ci-lint-enforcement "$REPO"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"workflow run step does not contain string shell and run values"* ]]
+  [[ "$output" != *"OK    fixture"* ]]
+}
+
 @test "fails closed on malformed workflow YAML" {
   write_workflow <<'YAML'
 name: Test

@@ -135,6 +135,8 @@ ci_lint_enforcement_workflow_has_aggregate() {
   local steps step shell run status
   local found=1
 
+  # yq can emit a partial object when this stream has no matching run steps.
+  # Filter after projection so zero-step workflows produce no candidate record.
   if ! steps=$(yq eval --output-format=json --indent=0 '
     . as $workflow |
     ($workflow.defaults.run.shell // "") as $workflow_shell |
@@ -149,7 +151,8 @@ ci_lint_enforcement_workflow_has_aggregate() {
       "run": .run,
       "continueOnError": (."continue-on-error" // false),
       "jobContinueOnError": ($job."continue-on-error" // false)
-    }
+    } |
+    select(has("run"))
   ' "$workflow" 2>&1); then
     printf 'ERROR: workflow is not parseable YAML: %s\n' "$workflow" >&2
     printf '%s\n' "$steps" >&2
