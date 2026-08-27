@@ -33,6 +33,7 @@ codebase_lint_group_members() {
         bash-empty-argv-forwarding \
         bash-empty-array-expansions \
         exec-stderr-persistence \
+        process-substitution-status \
         gum-table
       ;;
     @mise)

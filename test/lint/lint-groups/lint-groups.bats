@@ -40,7 +40,7 @@ load_groups() {
   ' _ "$REPO_DIR"
 
   [ "$status" -eq 0 ]
-  [ "$output" = $'[@shell]\nshellcheck\nor-true\nbash-empty-argv-forwarding\nbash-empty-array-expansions\nexec-stderr-persistence\ngum-table\n[@mise]\nmise-settings\nmise-usage-examples\nvariadic-args\nmcr-scope\n[@bats]\nbats-test-helper\nbats-test-task\nbats-public-task-path\n[@ci]\ngithub-actions\nci-lint-enforcement\n[@shiv]\ncaller-pwd-contract\nmise-shiv-plugin\n[@all]\nshellcheck\nor-true\nbash-empty-argv-forwarding\nbash-empty-array-expansions\nexec-stderr-persistence\ngum-table\nmise-settings\nmise-usage-examples\nvariadic-args\nmcr-scope\nbats-test-helper\nbats-test-task\nbats-public-task-path\ngithub-actions\nci-lint-enforcement\ncaller-pwd-contract\nmise-shiv-plugin' ]
+  [ "$output" = $'[@shell]\nshellcheck\nor-true\nbash-empty-argv-forwarding\nbash-empty-array-expansions\nexec-stderr-persistence\nprocess-substitution-status\ngum-table\n[@mise]\nmise-settings\nmise-usage-examples\nvariadic-args\nmcr-scope\n[@bats]\nbats-test-helper\nbats-test-task\nbats-public-task-path\n[@ci]\ngithub-actions\nci-lint-enforcement\n[@shiv]\ncaller-pwd-contract\nmise-shiv-plugin\n[@all]\nshellcheck\nor-true\nbash-empty-argv-forwarding\nbash-empty-array-expansions\nexec-stderr-persistence\nprocess-substitution-status\ngum-table\nmise-settings\nmise-usage-examples\nvariadic-args\nmcr-scope\nbats-test-helper\nbats-test-task\nbats-public-task-path\ngithub-actions\nci-lint-enforcement\ncaller-pwd-contract\nmise-shiv-plugin' ]
 }
 
 @test "lint groups: every member resolves to a concrete executable lint task" {
@@ -57,7 +57,7 @@ load_groups() {
   run codebase_expand_lint_entries mise-settings @mise shellcheck @shell mise-settings
 
   [ "$status" -eq 0 ]
-  [ "$output" = $'mise-settings\nmise-usage-examples\nvariadic-args\nmcr-scope\nshellcheck\nor-true\nbash-empty-argv-forwarding\nbash-empty-array-expansions\nexec-stderr-persistence\ngum-table' ]
+  [ "$output" = $'mise-settings\nmise-usage-examples\nvariadic-args\nmcr-scope\nshellcheck\nor-true\nbash-empty-argv-forwarding\nbash-empty-array-expansions\nexec-stderr-persistence\nprocess-substitution-status\ngum-table' ]
 }
 
 @test "lint groups: unknown groups fail closed with discovery guidance" {
@@ -167,7 +167,7 @@ task_output = "interleave"
 
 [_.codebase]
 lint = ["@shell"]
-lint_exclude = ["shellcheck", "or-true", "bash-empty-argv-forwarding", "bash-empty-array-expansions", "exec-stderr-persistence"]
+lint_exclude = ["shellcheck", "or-true", "bash-empty-argv-forwarding", "bash-empty-array-expansions", "exec-stderr-persistence", "process-substitution-status"]
 
 [_.codebase.scope]
 gum-table = "scripts"
