@@ -44,9 +44,10 @@ EOF
   [ -x "$REPO/.git/hooks/pre-commit.d/codebase" ]
 }
 
-@test "install: hook delegates to aggregate lint" {
+@test "install: hook delegates through the repository Mise environment" {
   codebase pre-commit
-  grep -q 'exec codebase lint "$REPO_ROOT"' "$REPO/.git/hooks/pre-commit.d/codebase"
+  grep -q 'exec mise -C "$REPO_ROOT" exec -- codebase lint "$REPO_ROOT"' \
+    "$REPO/.git/hooks/pre-commit.d/codebase"
 }
 
 @test "install: hook does not bake configured rules or scopes" {
@@ -62,7 +63,8 @@ lint = ["mise-settings", "gum-table"]
 gum-table = "custom/gum-path"
 EOF
   codebase pre-commit
-  grep -q 'exec codebase lint "$REPO_ROOT"' "$REPO/.git/hooks/pre-commit.d/codebase"
+  grep -q 'exec mise -C "$REPO_ROOT" exec -- codebase lint "$REPO_ROOT"' \
+    "$REPO/.git/hooks/pre-commit.d/codebase"
   ! grep -q 'lint:mise-settings' "$REPO/.git/hooks/pre-commit.d/codebase"
   ! grep -q 'custom/gum-path' "$REPO/.git/hooks/pre-commit.d/codebase"
 }
@@ -72,24 +74,83 @@ EOF
   bash -n "$REPO/.git/hooks/pre-commit.d/codebase"
 }
 
-@test "install: generated hook delegates to codebase lint for repo root" {
+@test "install: generated hook ignores stale ambient Codebase" {
   codebase pre-commit
 
-  mkdir -p "$BATS_TEST_TMPDIR/bin"
-  cat > "$BATS_TEST_TMPDIR/bin/codebase" <<'EOF'
+  local bin="$BATS_TEST_TMPDIR/bin"
+  mkdir -p "$bin"
+  cat > "$bin/codebase" <<'EOF'
+#!/usr/bin/env bash
+touch "$AMBIENT_CODEBASE_RAN"
+exit 99
+EOF
+  cat > "$bin/mise" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$MISE_HOOK_ARGS"
+while [[ "$1" != "--" ]]; do shift; done
+shift
+[[ "$1" == "codebase" ]]
+shift
+exec "$SELECTED_CODEBASE" "$@"
+EOF
+  cat > "$bin/selected-codebase" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$@" > "$CODEBASE_HOOK_ARGS"
 EOF
-  chmod +x "$BATS_TEST_TMPDIR/bin/codebase"
-  export CODEBASE_HOOK_ARGS="$BATS_TEST_TMPDIR/hook-args"
-  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+  chmod +x "$bin/codebase" "$bin/mise" "$bin/selected-codebase"
+  export AMBIENT_CODEBASE_RAN="$BATS_TEST_TMPDIR/ambient-codebase-ran"
+  export MISE_HOOK_ARGS="$BATS_TEST_TMPDIR/mise-hook-args"
+  export SELECTED_CODEBASE="$bin/selected-codebase"
+  export CODEBASE_HOOK_ARGS="$BATS_TEST_TMPDIR/codebase-hook-args"
 
-  # Git always invokes hooks from the repo root. Simulate that —
-  # the hook reads REPO_ROOT via 'git rev-parse --show-toplevel'.
-  run bash -c 'cd "$1" && bash "$1/.git/hooks/pre-commit.d/codebase"' _ "$REPO"
+  run env PATH="$bin:/usr/bin:/bin" \
+    bash -c 'cd "$1" && bash "$1/.git/hooks/pre-commit.d/codebase"' _ "$REPO"
+
   [ "$status" -eq 0 ]
+  [ ! -e "$AMBIENT_CODEBASE_RAN" ]
+  [ "$(sed -n '1p' "$MISE_HOOK_ARGS")" = "-C" ]
+  [ "$(sed -n '2p' "$MISE_HOOK_ARGS")" = "$REPO_ROOT" ]
+  [ "$(sed -n '3p' "$MISE_HOOK_ARGS")" = "exec" ]
+  [ "$(sed -n '4p' "$MISE_HOOK_ARGS")" = "--" ]
+  [ "$(sed -n '5p' "$MISE_HOOK_ARGS")" = "codebase" ]
   [ "$(sed -n '1p' "$CODEBASE_HOOK_ARGS")" = "lint" ]
   [ "$(sed -n '2p' "$CODEBASE_HOOK_ARGS")" = "$REPO_ROOT" ]
+}
+
+@test "install: generated hook fails clearly when Mise is unavailable" {
+  codebase pre-commit
+
+  run env PATH="/usr/bin:/bin" \
+    bash -c 'cd "$1" && bash "$1/.git/hooks/pre-commit.d/codebase"' _ "$REPO"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"mise is required to run the repository-selected Codebase"* ]]
+}
+
+@test "install: generated hook preserves a missing declared Codebase failure" {
+  codebase pre-commit
+
+  local bin="$BATS_TEST_TMPDIR/bin"
+  mkdir -p "$bin"
+  cat > "$bin/codebase" <<'EOF'
+#!/usr/bin/env bash
+touch "$AMBIENT_CODEBASE_RAN"
+exit 0
+EOF
+  cat > "$bin/mise" <<'EOF'
+#!/usr/bin/env bash
+echo "mise ERROR codebase is not installed" >&2
+exit 42
+EOF
+  chmod +x "$bin/codebase" "$bin/mise"
+  export AMBIENT_CODEBASE_RAN="$BATS_TEST_TMPDIR/ambient-codebase-ran"
+
+  run env PATH="$bin:/usr/bin:/bin" \
+    bash -c 'cd "$1" && bash "$1/.git/hooks/pre-commit.d/codebase"' _ "$REPO"
+
+  [ "$status" -eq 42 ]
+  [[ "$output" == *"codebase is not installed"* ]]
+  [ ! -e "$AMBIENT_CODEBASE_RAN" ]
 }
 
 @test "install: dispatcher is executable" {
@@ -238,7 +299,8 @@ quiet = true
 lint = ["gum-table"]
 EOF
   codebase pre-commit
-  grep -q 'exec codebase lint "$REPO_ROOT"' "$REPO/.git/hooks/pre-commit.d/codebase"
+  grep -q 'exec mise -C "$REPO_ROOT" exec -- codebase lint "$REPO_ROOT"' \
+    "$REPO/.git/hooks/pre-commit.d/codebase"
   ! grep -q '.mise/tasks' "$REPO/.git/hooks/pre-commit.d/codebase"
 }
 
@@ -254,7 +316,8 @@ lint = ["gum-table"]
 gum-table = "src/scripts"
 EOF
   codebase pre-commit
-  grep -q 'exec codebase lint "$REPO_ROOT"' "$REPO/.git/hooks/pre-commit.d/codebase"
+  grep -q 'exec mise -C "$REPO_ROOT" exec -- codebase lint "$REPO_ROOT"' \
+    "$REPO/.git/hooks/pre-commit.d/codebase"
   ! grep -q 'src/scripts' "$REPO/.git/hooks/pre-commit.d/codebase"
 }
 
