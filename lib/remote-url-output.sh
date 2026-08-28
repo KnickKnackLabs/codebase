@@ -62,33 +62,66 @@ remote_url_output_set_source_range() {
 remote_url_output_record_assignment() {
   local source="$1"
   local line="$2"
-  local variable value
+  local variable value direct_value
 
+  _REMOTE_URL_OUTPUT_RECORDED_VARIABLE=""
+  _REMOTE_URL_OUTPUT_RECORDED_PROVENANCE=""
   if [[ ! "$source" =~ ([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*= ]]; then
     return 0
   fi
   variable="${BASH_REMATCH[1]}"
   value="${source#*=}"
+  _REMOTE_URL_OUTPUT_RECORDED_VARIABLE="$variable"
+  remote_url_output_set_direct_assignment_value "$value"
+  direct_value="$_REMOTE_URL_OUTPUT_DIRECT_ASSIGNMENT_VALUE"
 
   if [[ "$value" =~ (redact|sanitize|scrub|mask)[_A-Za-z0-9.-]*[[:space:]] ]]; then
     if remote_url_output_argument_has_sensitive_value "$value" "$line"; then
+      _REMOTE_URL_OUTPUT_RECORDED_PROVENANCE=taint
       remote_url_output_mark_event taint "$variable" "$line"
     else
-      remote_url_output_mark_event safe "$variable" "$line"
+      _REMOTE_URL_OUTPUT_RECORDED_PROVENANCE=redacted
+      remote_url_output_mark_event redacted "$variable" "$line"
     fi
-  elif [[ "$value" =~ git[[:space:]]+remote[[:space:]]+get-url([[:space:]]|$) ]]; then
+  elif [[ "$value" =~ git[[:space:]]+remote[[:space:]]+get-url([[:space:]]|$) ]] ||
+    { [[ ! "$value" =~ ^\"?\$\(.*\)\"?$ ]] && remote_url_output_argument_has_sensitive_value "$direct_value" "$line"; }; then
+    _REMOTE_URL_OUTPUT_RECORDED_PROVENANCE=taint
     remote_url_output_mark_event taint "$variable" "$line"
+  else
+    _REMOTE_URL_OUTPUT_RECORDED_PROVENANCE=safe
+    # Every assignment supersedes earlier provenance. A known-safe value must
+    # clear stale taint, just as an unredacted value must clear stale safety.
+    remote_url_output_mark_event safe "$variable" "$line"
   fi
 }
 
-remote_url_output_scan_files() {
-  local ast_output candidates file staged_file current_file="" kind first last command encoded_args source line trimmed ignore_status
-  local findings="" scan_dir index
+remote_url_output_cleanup_scan_workspace() {
+  local status=$?
+
+  trap - EXIT
+  if [[ -n "$scan_dir" ]] && ! rm -rf "$scan_dir"; then
+    printf 'ERROR: could not remove the remote URL scan workspace: %s\n' "$scan_dir" >&2
+    [[ "$status" -ne 0 ]] || status=1
+  fi
+  exit "$status"
+}
+
+remote_url_output_scan_files() (
+  local ast_output candidates file staged_file current_file="" kind first last last_column first_byte last_byte command encoded_args
+  local source candidate_source pipeline_suffix line trimmed ignore_status captured_variable captured_provenance
+  local assignment_first_byte=-1 assignment_last_byte=-1 assignment_variable="" assignment_provenance=""
+  local findings="" scan_dir index LC_ALL=C
   local -a original_files
   _REMOTE_URL_OUTPUT_SOURCE_LINES=()
   _REMOTE_URL_OUTPUT_SOURCE_RANGE=""
+  _REMOTE_URL_OUTPUT_SOURCE_TEXT=""
+  _REMOTE_URL_OUTPUT_RECORDED_VARIABLE=""
+  _REMOTE_URL_OUTPUT_RECORDED_PROVENANCE=""
 
   original_files=("$@")
+  scan_dir=""
+  trap remote_url_output_cleanup_scan_workspace EXIT
+  trap 'exit 130' HUP INT TERM
   if ! scan_dir=$(mktemp -d "${TMPDIR:-/tmp}/codebase-remote-url-output.XXXXXX"); then
     printf '%s\n' 'ERROR: could not create the remote URL scan workspace' >&2
     return 1
@@ -99,7 +132,6 @@ remote_url_output_scan_files() {
       printf '%s\n' "$line"
     done < "${original_files[$index]}" > "$staged_file"; then
       printf 'ERROR: could not stage shell file for scanning: %s\n' "${original_files[$index]}" >&2
-      rm -rf "$scan_dir"
       return 1
     fi
   done
@@ -107,16 +139,14 @@ remote_url_output_scan_files() {
   if ! ast_output=$(ast-grep scan --threads 1 --rule "$_CODEBASE_REMOTE_URL_OUTPUT_CANDIDATE_RULE" --json=stream "$scan_dir" 2>&1); then
     printf '%s\n' 'ERROR: ast-grep could not inspect shell-file candidates' >&2
     printf '%s\n' "$ast_output" >&2
-    rm -rf "$scan_dir"
     return 1
   fi
-  rm -rf "$scan_dir"
-  if ! candidates=$(printf '%s\n' "$ast_output" | jq -r '[.file, if .metaVariables.single.CMD? then "command" else "assignment" end, .range.start.line + 1, .range.end.line + 1, (.metaVariables.single.CMD.text // ""), ((.metaVariables.multi.ARGS // []) | map(.text) | join("\u001f"))] | @tsv'); then
+  if ! candidates=$(printf '%s\n' "$ast_output" | jq -r '[.file, if .metaVariables.single.CMD? then "command" else "assignment" end, .range.start.line + 1, .range.end.line + 1, .range.end.column, .range.byteOffset.start, .range.byteOffset.end, (.metaVariables.single.CMD.text // ""), ((.metaVariables.multi.ARGS // []) | map(.text) | join("\u001f"))] | @tsv'); then
     printf '%s\n' 'ERROR: could not parse ast-grep candidate output' >&2
     return 1
   fi
 
-  while IFS=$'\t' read -r staged_file kind first last command encoded_args; do
+  while IFS=$'\t' read -r staged_file kind first last last_column first_byte last_byte command encoded_args; do
     [[ -n "$staged_file" ]] || continue
     index="${staged_file##*/}"
     index="${index%.sh}"
@@ -129,13 +159,31 @@ remote_url_output_scan_files() {
       current_file="$file"
       _REMOTE_URL_OUTPUT_TAINT_EVENTS=""
       _REMOTE_URL_OUTPUT_SAFE_EVENTS=""
-      remote_url_output_load_source_lines "$file"
+      _REMOTE_URL_OUTPUT_REDACTED_EVENTS=""
+      _REMOTE_URL_OUTPUT_EVENT_SEQUENCE=0
+      assignment_first_byte=-1
+      assignment_last_byte=-1
+      assignment_variable=""
+      assignment_provenance=""
+      remote_url_output_load_source_lines "$staged_file"
+      _REMOTE_URL_OUTPUT_SOURCE_TEXT=$(< "$staged_file")
     fi
 
+    if [[ ! "$first" =~ ^[0-9]+$ || ! "$last" =~ ^[0-9]+$ || ! "$last_column" =~ ^[0-9]+$ ||
+      ! "$first_byte" =~ ^[0-9]+$ || ! "$last_byte" =~ ^[0-9]+$ || "$last_byte" -lt "$first_byte" ]]; then
+      printf 'ERROR: ast-grep returned an invalid candidate range: %s..%s\n' "$first_byte" "$last_byte" >&2
+      return 1
+    fi
     remote_url_output_set_source_range "$first" "$last"
     source="$_REMOTE_URL_OUTPUT_SOURCE_RANGE"
+    candidate_source="${_REMOTE_URL_OUTPUT_SOURCE_TEXT:$first_byte:$((last_byte - first_byte))}"
+    pipeline_suffix="${_REMOTE_URL_OUTPUT_SOURCE_LINES[$((last - 1))]:$last_column}"
     if [[ "$kind" == assignment ]]; then
-      remote_url_output_record_assignment "$source" "$first"
+      remote_url_output_record_assignment "$candidate_source" "$first"
+      assignment_first_byte="$first_byte"
+      assignment_last_byte="$last_byte"
+      assignment_variable="$_REMOTE_URL_OUTPUT_RECORDED_VARIABLE"
+      assignment_provenance="$_REMOTE_URL_OUTPUT_RECORDED_PROVENANCE"
       continue
     fi
 
@@ -146,14 +194,20 @@ remote_url_output_scan_files() {
       [[ "$ignore_status" -eq 1 ]] || return "$ignore_status"
     fi
 
-    if remote_url_output_classify_command "$command" "$encoded_args" "$source" "$first"; then
+    captured_variable=""
+    captured_provenance=""
+    if [[ "$first_byte" -ge "$assignment_first_byte" && "$last_byte" -le "$assignment_last_byte" ]]; then
+      captured_variable="$assignment_variable"
+      captured_provenance="$assignment_provenance"
+    fi
+    if remote_url_output_classify_command "$command" "$encoded_args" "$pipeline_suffix" "$first" "$captured_variable" "$captured_provenance"; then
       line="${_REMOTE_URL_OUTPUT_SOURCE_LINES[$((first - 1))]}"
       trimmed="${line#"${line%%[![:space:]]*}"}"
       findings+="$file"$'\t'"$first: $_REMOTE_URL_OUTPUT_REASON: $trimmed"$'\n'
     fi
   done <<< "$candidates"
   printf '%s' "$findings"
-}
+)
 
 remote_url_output_lint() {
   local encoded_targets="$1"

@@ -26,28 +26,83 @@ mixed_url="$remote_url $(redact_url "$remote_url")"
 printf '%s\n' "$mixed_url"
 printf '%s\n' "$(obscure_filter "$remote_url")"
 git remote get-url origin
+git -C . remote get-url origin
+other=public; git remote get-url origin
+command -- git remote get-url origin
 BASH
 
   run codebase lint:remote-url-output "$REPO"
 
   [ "$status" -eq 1 ]
-  [[ "$output" == *"FAIL  repo: 5 credential-bearing remote URL output risk(s)"* ]]
+  [[ "$output" == *"FAIL  repo: 8 credential-bearing remote URL output risk(s)"* ]]
   [[ "$output" == *"probe:2: prints a remote URL"* ]]
   [[ "$output" == *"probe:7: writes git remote get-url directly"* ]]
+  [[ "$output" == *"probe:8: writes git remote get-url directly"* ]]
+  [[ "$output" == *"probe:9: writes git remote get-url directly"* ]]
+  [[ "$output" == *"probe:10: writes git remote get-url directly"* ]]
 }
 
 @test "follows a captured remote URL through a generically named variable" {
   write_shell "$REPO" probe <<'BASH'
 #!/usr/bin/env bash
-value=$(git remote get-url origin)
+value=$(git -C . remote get-url origin)
+copy="${value}"
 printf '%s\n' "$value"
+printf '%s\n' "$copy"
+BASH
+
+  run codebase lint:remote-url-output "$REPO"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL  repo: 2 credential-bearing remote URL output risk(s)"* ]]
+  [[ "$output" == *"probe:4:"* ]]
+  [[ "$output" == *"probe:5:"* ]]
+}
+
+@test "later assignments replace earlier taint and safety provenance" {
+  write_shell "$REPO" probe <<'BASH'
+#!/usr/bin/env bash
+value=$(git remote get-url origin)
+safe=$(redact_url "$value")
+safe="$value"
+printf '%s\n' "$safe"
+value=public
+printf '%s\n' "$value"
+same=$(git remote get-url origin); same=public; printf '%s\n' "$same"
 BASH
 
   run codebase lint:remote-url-output "$REPO"
 
   [ "$status" -eq 1 ]
   [[ "$output" == *"FAIL  repo: 1 credential-bearing remote URL output risk(s)"* ]]
-  [[ "$output" == *"probe:3:"* ]]
+  [[ "$output" == *"probe:5: prints a remote URL"* ]]
+  [[ "$output" != *"probe:7:"* ]]
+  [[ "$output" != *"probe:8:"* ]]
+}
+
+@test "propagates known captured output without guessing helper return semantics" {
+  write_shell "$REPO" probe <<'BASH'
+#!/usr/bin/env bash
+probe() {
+  local remote_url="$1"
+  local tag captured result
+  tag=$(release_tag_for "$remote_url")
+  printf '%s\n' "$tag"
+  captured=$(printf '%s' "$remote_url")
+  printf '%s\n' "$captured"
+  result=$(git ls-remote "$remote_url" 2>&1)
+  printf '%s\n' "$result"
+}
+BASH
+
+  run codebase lint:remote-url-output "$REPO"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL  repo: 2 credential-bearing remote URL output risk(s)"* ]]
+  [[ "$output" != *"probe:6:"* ]]
+  [[ "$output" == *"probe:8: prints a remote URL"* ]]
+  [[ "$output" == *"probe:9: runs git ls-remote"* ]]
+  [[ "$output" != *"probe:10:"* ]]
 }
 
 @test "accepts recognized redaction calls and nonexecuted lookalikes" {
@@ -59,6 +114,14 @@ printf '%s\n' "$safe_url"
 printf '%s\n' "$(sanitize_url "$remote_url")"
 printf '%s\n' "$(homes_redact_url "$remote_url")"
 printf '%s\n' "$remote_url" | mask_credentials
+captured=$(printf '%s' "$remote_url")
+printf '%s\n' "$(scrub_tokens "$captured")"
+printf '%s\n' "$remote_url" >/dev/null
+git remote get-url origin >/dev/null
+origin='ssh://git@github.com/owner/home.git'
+path=${origin#ssh://git@github.com/}
+login=${path%%/*}
+printf '%s\n' "$login"
 # printf '%s\n' "$remote_url"
 printf '%s\n' '$remote_url'
 printf '%s\n' 'git remote get-url origin'
@@ -77,15 +140,38 @@ git clone "$remote_url" target
 git fetch "$origin_url"
 result=$(git ls-remote --tags "$repo_url" 2>&1)
 git push "$remote_url" main 2>error.log
+git -c protocol.version=2 ls-remote "$repo_url"
+git clone "$remote_url" target; true 2>/dev/null
+git fetch "$origin_url"; printf 'unrelated\n' | mask_credentials
+command -p git clone "$remote_url" target
 BASH
 
   run codebase lint:remote-url-output "$REPO"
 
   [ "$status" -eq 1 ]
-  [[ "$output" == *"FAIL  repo: 4 credential-bearing remote URL output risk(s)"* ]]
+  [[ "$output" == *"FAIL  repo: 8 credential-bearing remote URL output risk(s)"* ]]
   [[ "$output" == *"runs git clone"* ]]
   [[ "$output" == *"runs git ls-remote"* ]]
   [[ "$output" == *"runs git push"* ]]
+}
+
+@test "does not mistake later Git arguments for subcommands" {
+  write_shell "$REPO" probe <<'BASH'
+#!/usr/bin/env bash
+git show clone "$remote_url"
+git config remote get-url "$remote_url"
+printf '%s\n' 'https://secret-token@github.example/repo.git'
+printf '%s\n' 'ssh://git@github.example/owner/repo.git'
+BASH
+
+  run codebase lint:remote-url-output "$REPO"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL  repo: 1 credential-bearing remote URL output risk(s)"* ]]
+  [[ "$output" == *"probe:4: prints a remote URL"* ]]
+  [[ "$output" != *"runs git clone"* ]]
+  [[ "$output" != *"writes git remote get-url"* ]]
+  [[ "$output" != *"probe:5:"* ]]
 }
 
 @test "accepts named remotes and recognized Git stderr redaction" {
@@ -183,6 +269,7 @@ BASH
 
 @test "ast-grep failures fail closed" {
   local mock_bin="$BATS_TEST_TMPDIR/mock-bin"
+  export TMPDIR="$BATS_TEST_TMPDIR"
   mkdir -p "$mock_bin"
   cat > "$mock_bin/ast-grep" <<'BASH'
 #!/usr/bin/env bash
@@ -202,6 +289,9 @@ BASH
   [[ "$output" == *"ast-grep could not inspect shell-file candidates"* ]]
   [[ "$output" == *"injected ast-grep failure"* ]]
   [[ "$output" != *"OK    repo"* ]]
+  run find "$TMPDIR" -maxdepth 1 -name 'codebase-remote-url-output.*' -print
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }
 
 @test "missing, nonexistent, and shell-free targets report clearly" {
