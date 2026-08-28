@@ -19,6 +19,17 @@ load_groups() {
   source "$REPO_DIR/lib/lint-groups.sh"
 }
 
+assert_group_members() {
+  local group="$1"
+  local expected
+  expected=$(cat)
+
+  run codebase_lint_group_members "$group"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = "$expected" ]
+}
+
 @test "lint groups: exposes the six groups in stable order" {
   load_groups
 
@@ -31,16 +42,51 @@ load_groups() {
 @test "lint groups: owns the exact current substrate membership" {
   load_groups
 
-  run bash -c '
-    source "$1/lib/lint-groups.sh"
-    for group in @shell @mise @bats @ci @shiv @all; do
-      printf "[%s]\n" "$group"
+  assert_group_members @shell <<'EOF'
+shellcheck
+or-true
+bash-empty-argv-forwarding
+bash-empty-array-expansions
+exec-stderr-persistence
+process-substitution-status
+gum-table
+EOF
+  assert_group_members @mise <<'EOF'
+mise-settings
+mise-usage-examples
+variadic-args
+mcr-scope
+EOF
+  assert_group_members @bats <<'EOF'
+bats-test-helper
+bats-test-task
+bats-public-task-path
+EOF
+  assert_group_members @ci <<'EOF'
+github-actions
+ci-lint-enforcement
+EOF
+  assert_group_members @shiv <<'EOF'
+caller-pwd-contract
+mise-shiv-plugin
+EOF
+}
+
+@test "lint groups: @all composes the substrate groups in stable order" {
+  local expected
+  local group
+  load_groups
+
+  expected=$(
+    while IFS= read -r group; do
       codebase_lint_group_members "$group"
-    done
-  ' _ "$REPO_DIR"
+    done <<< "$(codebase_substrate_lint_groups)"
+  )
+
+  run codebase_lint_group_members @all
 
   [ "$status" -eq 0 ]
-  [ "$output" = $'[@shell]\nshellcheck\nor-true\nbash-empty-argv-forwarding\nbash-empty-array-expansions\nexec-stderr-persistence\ngum-table\n[@mise]\nmise-settings\nmise-usage-examples\nvariadic-args\nmcr-scope\n[@bats]\nbats-test-helper\nbats-test-task\nbats-public-task-path\n[@ci]\ngithub-actions\nci-lint-enforcement\n[@shiv]\ncaller-pwd-contract\nmise-shiv-plugin\n[@all]\nshellcheck\nor-true\nbash-empty-argv-forwarding\nbash-empty-array-expansions\nexec-stderr-persistence\ngum-table\nmise-settings\nmise-usage-examples\nvariadic-args\nmcr-scope\nbats-test-helper\nbats-test-task\nbats-public-task-path\ngithub-actions\nci-lint-enforcement\ncaller-pwd-contract\nmise-shiv-plugin' ]
+  [ "$output" = "$expected" ]
 }
 
 @test "lint groups: every member resolves to a concrete executable lint task" {
@@ -57,7 +103,7 @@ load_groups() {
   run codebase_expand_lint_entries mise-settings @mise shellcheck @shell mise-settings
 
   [ "$status" -eq 0 ]
-  [ "$output" = $'mise-settings\nmise-usage-examples\nvariadic-args\nmcr-scope\nshellcheck\nor-true\nbash-empty-argv-forwarding\nbash-empty-array-expansions\nexec-stderr-persistence\ngum-table' ]
+  [ "$output" = $'mise-settings\nmise-usage-examples\nvariadic-args\nmcr-scope\nshellcheck\nor-true\nbash-empty-argv-forwarding\nbash-empty-array-expansions\nexec-stderr-persistence\nprocess-substitution-status\ngum-table' ]
 }
 
 @test "lint groups: unknown groups fail closed with discovery guidance" {
@@ -167,7 +213,7 @@ task_output = "interleave"
 
 [_.codebase]
 lint = ["@shell"]
-lint_exclude = ["shellcheck", "or-true", "bash-empty-argv-forwarding", "bash-empty-array-expansions", "exec-stderr-persistence"]
+lint_exclude = ["shellcheck", "or-true", "bash-empty-argv-forwarding", "bash-empty-array-expansions", "exec-stderr-persistence", "process-substitution-status"]
 
 [_.codebase.scope]
 gum-table = "scripts"

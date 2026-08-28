@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Flag process substitutions whose command status is hidden"
+#USAGE arg "<targets>" var=#true help="Paths to codebases to check (one or more)"
+#USAGE example "codebase lint:process-substitution-status ." header="Check one repository"
+#USAGE example "codebase lint:process-substitution-status repo-a repo-b" header="Check several repositories"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/process-substitution-status.sh
+source "$MISE_CONFIG_ROOT/lib/process-substitution-status.sh"
+
+process_substitution_status_lint "${usage_targets:-}"
