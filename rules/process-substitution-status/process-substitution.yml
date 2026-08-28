@@ -1,6 +1,6 @@
 id: process-substitution-status-candidate
 language: Bash
 severity: hint
-message: the parent shell cannot observe this process substitution producer's status
+message: the parent shell cannot observe this process substitution command's status
 rule:
   kind: process_substitution

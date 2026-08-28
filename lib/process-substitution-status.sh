@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Detect process substitutions whose producer status is unavailable to the
+# Detect process substitutions whose command status is unavailable to the
 # parent shell. This is a syntactic safety boundary: the rule does not infer
-# whether a producer can fail or whether empty output is acceptable.
+# whether that command can fail or whether its missing output is acceptable.
 
 _CODEBASE_PROCESS_SUBSTITUTION_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _CODEBASE_PROCESS_SUBSTITUTION_RULE="$_CODEBASE_PROCESS_SUBSTITUTION_LIB_DIR/../rules/process-substitution-status/process-substitution.yml"
@@ -137,9 +137,9 @@ process_substitution_status_lint() {
     done
 
     if [[ "$hit_count" -gt 0 ]]; then
-      printf 'FAIL  %s: %s hidden process-substitution producer status(es)\n' "$name" "$hit_count"
+      printf 'FAIL  %s: %s hidden process-substitution command status(es)\n' "$name" "$hit_count"
       printf '%s' "$target_output"
-      printf '%s\n' '  hint: write producer output to a snapshot, check the producer command, then consume the snapshot.'
+      printf '%s\n' '  hint: replace the process substitution with directly checked commands, using an intermediate snapshot when data must pass between them.'
       failures=$((failures + 1))
     else
       printf 'OK    %s (%s file(s) clean)\n' "$name" "${#files[@]}"

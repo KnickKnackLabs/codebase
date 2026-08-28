@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Public-path contract for hidden process-substitution producer statuses.
+# Public-path contract for hidden process-substitution command statuses.
 
 load ../../test_helper
 bats_require_minimum_version 1.5.0
@@ -30,11 +30,12 @@ BASH
   run codebase lint:process-substitution-status "$REPO"
 
   [ "$status" -eq 1 ]
-  [[ "$output" == *"FAIL  repo: 4 hidden process-substitution producer status(es)"* ]]
+  [[ "$output" == *"FAIL  repo: 4 hidden process-substitution command status(es)"* ]]
   [[ "$output" == *"probe:4: done < <(git diff --name-only)"* ]]
   [[ "$output" == *"probe:5: diff <(generate expected) <(generate actual)"* ]]
   [[ "$output" == *"probe:6: tee >(compress >archive.gz) <input"* ]]
-  [[ "$output" == *"write producer output to a snapshot"* ]]
+  [[ "$output" == *"directly checked commands"* ]]
+  [[ "$output" == *"intermediate snapshot"* ]]
 }
 
 @test "reports multiline process substitutions at their opening line" {
@@ -84,7 +85,7 @@ BASH
   run codebase lint:process-substitution-status "$REPO"
 
   [ "$status" -eq 1 ]
-  [[ "$output" == *"FAIL  repo: 2 hidden process-substitution producer status(es)"* ]]
+  [[ "$output" == *"FAIL  repo: 2 hidden process-substitution command status(es)"* ]]
   [[ "$output" != *"best_effort"* ]]
   [[ "$output" == *"unchecked"* ]]
   [[ "$output" == *"wrong_rule"* ]]
@@ -147,7 +148,7 @@ BASH
   run codebase lint:process-substitution-status "$REPO"
 
   [ "$status" -eq 1 ]
-  [[ "$output" == *"FAIL  repo: 2 hidden process-substitution producer status(es)"* ]]
+  [[ "$output" == *"FAIL  repo: 2 hidden process-substitution command status(es)"* ]]
   [[ "$output" == *"lib/probe.sh"* ]]
   [[ "$output" == *"bin/tool"* ]]
 }
@@ -249,5 +250,5 @@ BASH
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"process substitutions"* ]]
-  [[ "$output" == *"producer status is hidden"* ]]
+  [[ "$output" == *"command status is hidden"* ]]
 }
