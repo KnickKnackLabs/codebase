@@ -49,6 +49,7 @@ bash-empty-argv-forwarding
 bash-empty-array-expansions
 exec-stderr-persistence
 process-substitution-status
+remote-url-output
 gum-table
 EOF
   assert_group_members @mise <<'EOF'
@@ -103,7 +104,7 @@ EOF
   run codebase_expand_lint_entries mise-settings @mise shellcheck @shell mise-settings
 
   [ "$status" -eq 0 ]
-  [ "$output" = $'mise-settings\nmise-usage-examples\nvariadic-args\nmcr-scope\nshellcheck\nor-true\nbash-empty-argv-forwarding\nbash-empty-array-expansions\nexec-stderr-persistence\nprocess-substitution-status\ngum-table' ]
+  [ "$output" = $'mise-settings\nmise-usage-examples\nvariadic-args\nmcr-scope\nshellcheck\nor-true\nbash-empty-argv-forwarding\nbash-empty-array-expansions\nexec-stderr-persistence\nprocess-substitution-status\nremote-url-output\ngum-table' ]
 }
 
 @test "lint groups: unknown groups fail closed with discovery guidance" {
@@ -213,7 +214,7 @@ task_output = "interleave"
 
 [_.codebase]
 lint = ["@shell"]
-lint_exclude = ["shellcheck", "or-true", "bash-empty-argv-forwarding", "bash-empty-array-expansions", "exec-stderr-persistence", "process-substitution-status"]
+lint_exclude = ["shellcheck", "or-true", "bash-empty-argv-forwarding", "bash-empty-array-expansions", "exec-stderr-persistence", "process-substitution-status", "remote-url-output"]
 
 [_.codebase.scope]
 gum-table = "scripts"

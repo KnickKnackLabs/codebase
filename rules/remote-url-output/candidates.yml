@@ -1,0 +1,10 @@
+id: remote-url-output-candidate
+language: Bash
+severity: hint
+message: inspect remote URL handling
+rule:
+  any:
+    - pattern:
+        context: $CMD $$$ARGS
+        selector: command
+    - kind: variable_assignment
