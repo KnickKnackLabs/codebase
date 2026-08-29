@@ -34,6 +34,7 @@ codebase_lint_group_members() {
         bash-empty-array-expansions \
         exec-stderr-persistence \
         process-substitution-status \
+        remote-url-output \
         gum-table
       ;;
     @mise)

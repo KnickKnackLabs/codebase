@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Flag credential-bearing Git remote URLs that may reach output"
+#USAGE arg "<targets>" var=#true help="Paths to codebases to check (one or more)"
+#USAGE example "codebase lint:remote-url-output ." header="Check one repository"
+#USAGE example "codebase lint:remote-url-output repo-a repo-b" header="Check several repositories"
+
+set -euo pipefail
+
+# shellcheck source=../../../lib/remote-url-output.sh
+source "$MISE_CONFIG_ROOT/lib/remote-url-output.sh"
+
+remote_url_output_lint "${usage_targets:-}"
