@@ -119,9 +119,17 @@ for target in "${TARGETS[@]}"; do
     continue
   fi
 
+  # mise runs `test/_default` when `.mise/tasks/test` is a directory, so lint
+  # whichever of the two it would actually run. A path is never both.
   task="$target/.mise/tasks/test"
+  task_label=".mise/tasks/test"
+  if [[ -d "$task" ]]; then
+    task="$task/_default"
+    task_label=".mise/tasks/test/_default"
+  fi
+
   if [[ ! -f "$task" ]]; then
-    echo "OK    $name (no .mise/tasks/test — nothing to check)"
+    echo "OK    $name (no $task_label — nothing to check)"
     continue
   fi
 
@@ -163,14 +171,14 @@ for target in "${TARGETS[@]}"; do
 
   # --- report ---
   if [[ ${#issues[@]} -gt 0 ]]; then
-    echo "FAIL  $name: ${#issues[@]} issue(s) in .mise/tasks/test"
+    echo "FAIL  $name: ${#issues[@]} issue(s) in $task_label"
     for issue in "${issues[@]}"; do
       echo "  - $issue"
     done
     echo "  hint: see fold/notes/bats-tool-testing.md ('The test task') for the canonical shape"
     failures=$((failures + 1))
   else
-    echo "OK    $name (.mise/tasks/test follows canonical pattern)"
+    echo "OK    $name ($task_label follows canonical pattern)"
   fi
 done
 
