@@ -87,14 +87,7 @@ setup() {
   [[ "$output" != *"invocations found"* ]]
 }
 
-# ============================================================================
-# Namespace default task (.mise/tasks/test/_default)
-# ============================================================================
-
 @test "bats-test-task: passes on a canonical _default namespace task" {
-  # Mise runs .mise/tasks/test/_default for `mise run test` when test/ is a
-  # directory — the shape a repo needs when it also has test:python. The
-  # canonical checks should apply to _default exactly as to the file form.
   run codebase lint:bats-test-task "$FIXTURES/namespace-default"
   [ "$status" -eq 0 ]
   [[ "$output" == *"OK"*"namespace-default"* ]]
@@ -102,8 +95,6 @@ setup() {
 }
 
 @test "bats-test-task: flags violations inside a _default namespace task" {
-  # The regression this rule had: a directory made -f false, so the target
-  # was reported green with zero coverage. These two issues were invisible.
   run codebase lint:bats-test-task "$FIXTURES/namespace-violation"
   [ "$status" -ne 0 ]
   [[ "$output" == *"FAIL"*"namespace-violation"* ]]
@@ -112,22 +103,19 @@ setup() {
 }
 
 @test "bats-test-task: namespace violations are never reported as OK" {
-  # Guards the exact wrong answer the rule used to give.
   run codebase lint:bats-test-task "$FIXTURES/namespace-violation"
   [[ "$output" != *"OK"* ]]
   [[ "$output" != *"nothing to check"* ]]
 }
 
 @test "bats-test-task: fail output names the _default path, not the directory" {
-  # The reader has to know which file to edit.
   run codebase lint:bats-test-task "$FIXTURES/namespace-violation"
   [ "$status" -ne 0 ]
   [[ "$output" == *"issue(s) in .mise/tasks/test/_default"* ]]
 }
 
 @test "bats-test-task: passes when a test namespace has no _default" {
-  # Only nested tasks (test:python), so `mise run test` has no
-  # implementation and there is no BATS task to check.
+  # No _default, so `mise run test` has no implementation to check.
   run codebase lint:bats-test-task "$FIXTURES/namespace-no-default"
   [ "$status" -eq 0 ]
   [[ "$output" == *"OK"*"namespace-no-default"* ]]

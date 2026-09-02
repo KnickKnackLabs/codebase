@@ -119,11 +119,8 @@ for target in "${TARGETS[@]}"; do
     continue
   fi
 
-  # `.mise/tasks/test` is canonically a file, but mise also treats a `test/`
-  # directory holding `_default` as the implementation of `mise run test` —
-  # the shape a repo needs when it also wants nested tasks such as
-  # `test:python`. Lint whichever file mise would actually run. A path can
-  # only be one of the two, so there is no "both forms" case to resolve.
+  # mise runs `test/_default` when `.mise/tasks/test` is a directory, so lint
+  # whichever of the two it would actually run. A path is never both.
   task="$target/.mise/tasks/test"
   task_label=".mise/tasks/test"
   if [[ -d "$task" ]]; then
