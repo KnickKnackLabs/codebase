@@ -21,6 +21,8 @@ job may set `continue-on-error` to anything other than literal false.
 
 ## Opt-in: repository-owned aggregate gate
 
+Requires Codebase **0.5 or later**. A `0.4` tool pin will not pick up this option.
+
 A repository whose tested aggregate owns lint may declare its exact CI command
 in `mise.toml`:
 
