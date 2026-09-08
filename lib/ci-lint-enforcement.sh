@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Require repositories with a configured lint portfolio to expose one direct,
-# failure-propagating aggregate `codebase lint` GitHub Actions workflow step.
+# Require a failure-propagating CI lint declaration: direct `codebase lint`
+# by default, or an explicitly trusted literal command in _.codebase.ci_lint_gate.
 #
 # This is intentionally structural rather than a workflow reachability or shell
 # dataflow analyzer. It recognizes a whole run value containing only direct
 # `codebase lint` or `mise exec -- codebase lint` command syntax. It does not
 # trace local tasks, prove workflow reachability, or interpret per-rule loops.
+# A configured gate asserts ownership of lint; it does not prove its internals.
+# See docs/ci-lint-enforcement.md for the configuration and trust boundary.
 
 _CODEBASE_CI_LINT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _CODEBASE_CI_LINT_RULE_DIR="$_CODEBASE_CI_LINT_LIB_DIR/../rules/ci-lint-enforcement"
@@ -31,6 +33,36 @@ ci_lint_enforcement_workflows() {
   for workflow in "$workflows_dir"/*.yml "$workflows_dir"/*.yaml; do
     [[ -f "$workflow" ]] && printf '%s\n' "$workflow"
   done | LC_ALL=C sort
+}
+
+ci_lint_enforcement_declared_gate() {
+  local repo="$1" config
+
+  [[ -f "$repo/mise.toml" ]] || return 0
+
+  # Read the typed value without evaluating configuration or shell text. yq is
+  # already the workflow parser; its TOML decoder preserves missing vs invalid.
+  if ! config=$(yq eval --input-format toml --output-format json \
+    '._.codebase // {}' "$repo/mise.toml"); then
+    printf 'ERROR: could not read CI lint policy from %s/mise.toml\n' "$repo" >&2
+    return 2
+  fi
+  if ! printf '%s\n' "$config" | jq -e 'type == "object"' >/dev/null; then
+    printf 'ERROR: expected a Codebase configuration table in %s/mise.toml\n' "$repo" >&2
+    return 2
+  fi
+  if ! printf '%s\n' "$config" | jq -e 'has("ci_lint_gate")' >/dev/null; then
+    return 0
+  fi
+  if ! printf '%s\n' "$config" | jq -e '
+    .ci_lint_gate | if type == "string" then
+      test("\\A[A-Za-z_./][A-Za-z0-9_./-]*( [A-Za-z0-9_./:@%+=,-]+)*\\z")
+    else false end
+  ' >/dev/null; then
+    printf 'ERROR: _.codebase.ci_lint_gate must be one nonempty literal command (unquoted words, single spaces, no shell syntax) in %s/mise.toml\n' "$repo" >&2
+    return 2
+  fi
+  printf '%s\n' "$config" | jq -r '.ci_lint_gate'
 }
 
 ci_lint_enforcement_normalize_expressions() {
@@ -82,8 +114,8 @@ ci_lint_enforcement_normalize_expressions() {
 }
 
 ci_lint_enforcement_run_has_aggregate() {
-  local run="$1"
-  local normalized errors output status pattern
+  local run="$1" declared_gate="${2:-}"
+  local normalized errors output status pattern candidate
 
   if ! normalized=$(ci_lint_enforcement_normalize_expressions "$run"); then
     return 2
@@ -127,16 +159,25 @@ ci_lint_enforcement_run_has_aggregate() {
       fi
     fi
   done
+
+  if [[ -n "$declared_gate" ]]; then
+    # The configured string is already restricted to literal command words.
+    # Compare the entire run value, not a descendant AST match or task name.
+    candidate="${run#"${run%%[![:space:]]*}"}"
+    candidate="${candidate%"${candidate##*[![:space:]]}"}"
+    [[ "$candidate" != "$declared_gate" ]] || return 0
+  fi
   return 1
 }
 
 ci_lint_enforcement_workflow_has_aggregate() {
-  local workflow="$1"
+  local workflow="$1" declared_gate="${2:-}"
   local steps step shell run status
   local found=1
 
   # yq can emit a partial object when this stream has no matching run steps.
   # Filter after projection so zero-step workflows produce no candidate record.
+  # shellcheck disable=SC2016 # These are literal yq bindings, not shell variables.
   if ! steps=$(yq eval --output-format=json --indent=0 '
     . as $workflow |
     ($workflow.defaults.run.shell // "") as $workflow_shell |
@@ -182,7 +223,7 @@ ci_lint_enforcement_workflow_has_aggregate() {
       '.continueOnError == false and .jobContinueOnError == false' \
       >/dev/null || continue
 
-    if ci_lint_enforcement_run_has_aggregate "$run"; then
+    if ci_lint_enforcement_run_has_aggregate "$run" "$declared_gate"; then
       found=0
     else
       status=$?
@@ -198,7 +239,7 @@ ci_lint_enforcement_workflow_has_aggregate() {
 
 ci_lint_enforcement_lint() {
   local encoded_targets="$1"
-  local target resolved repo name rules rule_count workflow status enforcement_count
+  local target resolved repo name rules rule_count workflow status enforcement_count declared_gate
   local failures=0
   local -a targets workflows
 
@@ -220,6 +261,7 @@ ci_lint_enforcement_lint() {
     fi
     repo=$(codebase_resolve_repo "$resolved") || return 1
     name=$(codebase_name "$repo") || return 1
+    declared_gate=$(ci_lint_enforcement_declared_gate "$repo") || return "$?"
     rules=$(codebase_configured_lint_rules "$repo")
     if [[ -z "$rules" ]]; then
       printf 'SKIP  %s (no configured codebase lint portfolio)\n' "$name"
@@ -234,7 +276,7 @@ ci_lint_enforcement_lint() {
 
     enforcement_count=0
     for workflow in ${workflows[@]+"${workflows[@]}"}; do
-      if ci_lint_enforcement_workflow_has_aggregate "$workflow"; then
+      if ci_lint_enforcement_workflow_has_aggregate "$workflow" "$declared_gate"; then
         enforcement_count=$((enforcement_count + 1))
       else
         status=$?
@@ -243,13 +285,25 @@ ci_lint_enforcement_lint() {
     done
 
     if [[ "$enforcement_count" -gt 0 ]]; then
-      printf 'OK    %s (%s configured rule(s), direct aggregate declaration in %s workflow(s))\n' \
-        "$name" "$rule_count" "$enforcement_count"
+      if [[ -n "$declared_gate" ]]; then
+        printf 'OK    %s (%s configured rule(s), direct or declared gate in %s workflow(s))\n' \
+          "$name" "$rule_count" "$enforcement_count"
+        printf '  trusted gate: %s (task internals not inspected)\n' "$declared_gate"
+      else
+        printf 'OK    %s (%s configured rule(s), direct aggregate declaration in %s workflow(s))\n' \
+          "$name" "$rule_count" "$enforcement_count"
+      fi
     else
+      # shellcheck disable=SC2016 # Backticks describe the command; they must not run it.
       printf 'FAIL  %s: no direct failure-propagating `codebase lint` declaration in GitHub Actions\n' \
         "$name"
       # shellcheck disable=SC2016 # User guidance intentionally shows a literal command.
       printf '%s\n' '  hint: add a run step containing only `codebase lint` (or `mise exec -- codebase lint`).'
+      if [[ -n "$declared_gate" ]]; then
+        printf '  or use the exact declared CI gate: %s\n' "$declared_gate"
+      else
+        printf '%s\n' '  a tested aggregate may opt in with _.codebase.ci_lint_gate; see docs/ci-lint-enforcement.md.'
+      fi
       failures=$((failures + 1))
     fi
   done
