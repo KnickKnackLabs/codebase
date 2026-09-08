@@ -34,3 +34,6 @@ jobs:
 
       - name: Run tests
         run: mise run test
+
+      - name: Check generated README
+        run: mise exec -- readme build --check
