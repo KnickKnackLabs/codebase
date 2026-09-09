@@ -87,6 +87,41 @@ setup() {
   [[ "$output" != *"invocations found"* ]]
 }
 
+@test "bats-test-task: passes on a canonical _default namespace task" {
+  run codebase lint:bats-test-task "$FIXTURES/namespace-default"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK"*"namespace-default"* ]]
+  [[ "$output" == *".mise/tasks/test/_default follows canonical pattern"* ]]
+}
+
+@test "bats-test-task: flags violations inside a _default namespace task" {
+  run codebase lint:bats-test-task "$FIXTURES/namespace-violation"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"FAIL"*"namespace-violation"* ]]
+  [[ "$output" == *"missing canonical #USAGE arg spec"* ]]
+  [[ "$output" == *"missing #USAGE example"* ]]
+}
+
+@test "bats-test-task: namespace violations are never reported as OK" {
+  run codebase lint:bats-test-task "$FIXTURES/namespace-violation"
+  [[ "$output" != *"OK"* ]]
+  [[ "$output" != *"nothing to check"* ]]
+}
+
+@test "bats-test-task: fail output names the _default path, not the directory" {
+  run codebase lint:bats-test-task "$FIXTURES/namespace-violation"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"issue(s) in .mise/tasks/test/_default"* ]]
+}
+
+@test "bats-test-task: passes when a test namespace has no _default" {
+  # No _default, so `mise run test` has no implementation to check.
+  run codebase lint:bats-test-task "$FIXTURES/namespace-no-default"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK"*"namespace-no-default"* ]]
+  [[ "$output" == *"no .mise/tasks/test/_default — nothing to check"* ]]
+}
+
 # ============================================================================
 # Ignore directive
 # ============================================================================

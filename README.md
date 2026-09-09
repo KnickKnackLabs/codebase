@@ -4,7 +4,7 @@
 
 # codebase
 
-[![tests: 423](https://img.shields.io/badge/tests-423-brightgreen?style=flat)](test/)
+[![tests: 428](https://img.shields.io/badge/tests-428-brightgreen?style=flat)](test/)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)](LICENSE)
 
 </div>

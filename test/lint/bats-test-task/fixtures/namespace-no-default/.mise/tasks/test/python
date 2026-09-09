@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Run Python unit tests"
+set -euo pipefail
+
+exec python3 -m pytest
