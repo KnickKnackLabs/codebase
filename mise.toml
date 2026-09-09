@@ -1,4 +1,8 @@
+[plugins]
+shiv = "https://github.com/KnickKnackLabs/vfox-shiv"
+
 [tools]
+"shiv:readme" = "0.3"
 bats = "1.13.0"
 ast-grep = "0.40.5"
 shellcheck = "0.11.0"

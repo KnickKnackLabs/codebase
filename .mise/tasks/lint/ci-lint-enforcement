@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-#MISE description="Require a direct failure-propagating aggregate lint step in GitHub Actions"
-#USAGE arg "<targets>" var=#true help="Paths to codebases to check (one or more)"
+#MISE description="Require failure-propagating CI lint or an explicitly trusted aggregate gate"
+#USAGE arg "<targets>" var=#true help="Paths to codebases; optional _.codebase.ci_lint_gate trusts an exact literal command (see docs/ci-lint-enforcement.md)"
 #USAGE example "codebase lint:ci-lint-enforcement ." header="Check one repository"
 #USAGE example "codebase lint:ci-lint-enforcement repo-a repo-b" header="Check several repositories"
 

@@ -2,26 +2,8 @@
 # Public-path contract for direct aggregate lint enforcement in GitHub Actions.
 
 load ../../test_helper
+load test_helper
 bats_require_minimum_version 1.5.0
-
-setup() {
-  REPO="$BATS_TEST_TMPDIR/repo"
-  WORKFLOW="$REPO/.github/workflows/test.yml"
-  mkdir -p "$(dirname "$WORKFLOW")"
-  write_config
-}
-
-write_config() {
-  cat > "$REPO/mise.toml" <<'TOML'
-[_.codebase]
-name = "fixture"
-lint = ["mise-settings", "shellcheck"]
-TOML
-}
-
-write_workflow() {
-  cat > "$WORKFLOW"
-}
 
 @test "accepts a direct aggregate command in a normal workflow step" {
   write_workflow <<'YAML'
